@@ -17,12 +17,12 @@ use tracing_subscriber::EnvFilter;
 use crate::config::AppConfig;
 use crate::state::AppState;
 
-/// Single-binary fullstack template: Axum REST API + embedded React SPA.
+/// Lizard: an ACME server that issues SSL/TLS certificates from its own private CA.
 ///
 /// Configuration is read from a TOML file; every flag below overrides
 /// the corresponding value from that file.
 #[derive(Parser, Debug)]
-#[command(name = "rusty-template", version, about)]
+#[command(name = "lizard", version, about)]
 struct Cli {
     /// Path to the TOML configuration file
     #[arg(short, long, default_value = "config.toml")]

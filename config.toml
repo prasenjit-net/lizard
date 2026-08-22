@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------
-# rusty-template configuration
+# lizard configuration
 #
 # Every value here can be overridden on the command line, e.g.:
-#   rusty-template --config other.toml --port 9000 --log-level debug
+#   lizard --config other.toml --port 9000 --log-level debug
 # ------------------------------------------------------------------
 
 [server]
@@ -19,8 +19,8 @@ access_log = "access.log"
 
 [ui]
 # This whole section is served to the SPA via GET /api/config.
-app_name = "Rusty Template"
-tagline = "Single-binary fullstack starter"
+app_name = "Lizard"
+tagline = "ACME server with a built-in private CA"
 # Theme the UI uses until the visitor picks one: light | dark | auto
 default_theme = "auto"
-repo_url = "https://github.com/prasenjit-net/rusty-template"
+repo_url = "https://github.com/prasenjit-net/lizard"

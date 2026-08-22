@@ -1,10 +1,19 @@
-# rusty-template
+# lizard
 
-[![CI](https://github.com/prasenjit-net/rusty-template/actions/workflows/ci.yml/badge.svg)](https://github.com/prasenjit-net/rusty-template/actions/workflows/ci.yml)
+[![CI](https://github.com/prasenjit-net/lizard/actions/workflows/ci.yml/badge.svg)](https://github.com/prasenjit-net/lizard/actions/workflows/ci.yml)
 
-A **single-binary fullstack template**: an [Axum](https://github.com/tokio-rs/axum)
+An **ACME server** that issues SSL/TLS certificates signed by its own private
+CA — bring your own root of trust and let internal services request
+certificates over the standard ACME protocol (the one `certbot`, `acme.sh`,
+Caddy, and Traefik already speak).
+
+Built as a single binary: an [Axum](https://github.com/tokio-rs/axum)
 REST + WebSocket backend with a React (Vite + TypeScript) SPA embedded straight
 into the executable. Build once, ship one file.
+
+> **Status:** early development — the ACME endpoints and CA machinery are not
+> implemented yet; what exists today is the application foundation described
+> below.
 
 ## Features
 
@@ -75,7 +84,7 @@ disk, so a production `npm run build` is picked up by a plain restart too.
 ## CLI
 
 ```
-rusty-template [OPTIONS]
+lizard [OPTIONS]
 
   -c, --config <CONFIG>        Path to the TOML configuration file [default: config.toml]
       --host <HOST>            Override [server].host
@@ -93,7 +102,7 @@ rusty-template [OPTIONS]
 | `server.port` | `8080` | Bind port |
 | `logging.level` | `info` | Tracing filter (full directives allowed, e.g. `info,access=warn`) |
 | `logging.access_log` | *(unset)* | Access-log file path; omit to disable the file |
-| `ui.app_name` | `Rusty Template` | Shown in the sidebar + browser title |
+| `ui.app_name` | `Lizard` | Shown in the sidebar + browser title |
 | `ui.tagline` | … | Shown under the app name |
 | `ui.default_theme` | `auto` | `light` \| `dark` \| `auto` — used until the visitor picks |
 | `ui.repo_url` | *(unset)* | Sidebar "Repository" link |
@@ -125,7 +134,7 @@ WebSocket events are JSON discriminated by `type`:
 ```json
 { "type": "metrics",  "data": { "cpu": 41.3, "memory": 58.0, "...": "…" } }
 { "type": "activity", "kind": "task", "message": "Task \"x\" created", "timestampMs": 0 }
-{ "type": "hello",    "message": "Connected to Rusty Template v0.1.0", "timestampMs": 0 }
+{ "type": "hello",    "message": "Connected to Lizard v0.1.0", "timestampMs": 0 }
 ```
 
 ## Project structure

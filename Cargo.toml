@@ -1,8 +1,8 @@
 [package]
-name = "rusty-template"
+name = "lizard"
 version = "0.1.0"
 edition = "2021"
-description = "Single-binary fullstack template: Axum REST API + embedded React (Vite) SPA"
+description = "ACME server that issues SSL/TLS certificates from its own private CA"
 
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }

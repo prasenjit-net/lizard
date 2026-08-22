@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## Project Overview
 
-`rusty-template` is a single-binary fullstack template:
+`lizard` is an ACME server that issues SSL/TLS certificates signed by its own private CA. It is a single binary built from a fullstack foundation:
 
 - Rust backend using Axum, Tokio, Clap, Serde, Tracing, and `rust-embed`.
 - React frontend under `ui/`, built with Vite, TypeScript, Tailwind CSS v4, TanStack Router, and TanStack Query.

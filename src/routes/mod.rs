@@ -8,6 +8,7 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 
 use crate::access_log;
+use crate::acme;
 use crate::state::SharedState;
 use crate::static_assets;
 
@@ -21,6 +22,11 @@ pub fn router(state: SharedState) -> Router {
         .route("/api/tasks/{id}/toggle", post(api::toggle_task))
         .route("/api/error-demo", get(api::error_demo))
         .route("/ws", get(ws::handler))
+        // The one URL an ACME client is expected to know in advance —
+        // unauthenticated, unnested, so it stays reachable at the bare
+        // base URL regardless of how /acme/* itself is laid out.
+        .route("/directory", get(acme::directory::directory))
+        .nest("/acme", acme::router(state.clone()))
         .fallback(static_assets::handler)
         .layer(from_fn_with_state(state.clone(), access_log::record))
         .with_state(state)

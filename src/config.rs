@@ -18,6 +18,12 @@ pub struct AppConfig {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    /// The externally-visible base URL ACME directory/resource URLs are
+    /// built from, e.g. `https://ca.example.com`. Unset by default,
+    /// falling back to `http://{host}:{port}` — set this explicitly once
+    /// this server sits behind a reverse proxy doing TLS termination,
+    /// since `host`/`port` alone can't describe that.
+    pub base_url: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -25,6 +31,7 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".into(),
             port: 8080,
+            base_url: None,
         }
     }
 }

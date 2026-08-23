@@ -1,8 +1,7 @@
 //! The SQLite-backed store for ACME state (accounts, orders,
 //! authorizations, challenges, certificates). Nonces are deliberately not
-//! here — see `crate::acme::nonce` (added in a later milestone) — losing
-//! them on restart is harmless, so they stay in memory.
-#![allow(dead_code)]
+//! here — see `crate::acme::nonce` — losing them on restart is harmless,
+//! so they stay in memory instead.
 
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};

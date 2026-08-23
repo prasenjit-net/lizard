@@ -90,6 +90,8 @@ export default function SettingsPage() {
               "—"
             )}
           </ConfigRow>
+          <ConfigRow label="Certificate validity">{config.ca.certValidityDays} days</ConfigRow>
+          <ConfigRow label="Root CA validity">{config.ca.rootValidityYears} years</ConfigRow>
         </dl>
         <p className="mt-3 text-[0.8rem] leading-relaxed text-ink-faint">
           Served by <code>GET /api/config</code>. Edit <code>config.toml</code> or pass CLI

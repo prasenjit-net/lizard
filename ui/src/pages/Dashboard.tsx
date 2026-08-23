@@ -1,19 +1,34 @@
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import ActivityFeed from "../components/ActivityFeed";
 import LiveChart from "../components/LiveChart";
 import StatCard from "../components/StatCard";
 import TasksCard from "../components/TasksCard";
 import { useLive } from "../context/LiveContext";
-import { IconActivity, IconCpu, IconDatabase, IconUsers } from "../icons";
+import { useToast } from "../context/ToastContext";
+import { IconActivity, IconCpu, IconDatabase, IconShield, IconUsers } from "../icons";
+import { api } from "../lib/api";
 import { formatNumber, formatUptime } from "../lib/format";
 
 export default function DashboardPage() {
   const { metrics, history, activities } = useLive();
+  const { notifyError } = useToast();
   const cpuSeries = history.map((m) => m.cpu);
   const memSeries = history.map((m) => m.memory);
 
+  // Same ["certificates"] query key the Certificates page uses — React
+  // Query dedupes/shares the fetch rather than issuing a second request.
+  const certsQuery = useQuery({ queryKey: ["certificates"], queryFn: api.listCertificates });
+  useEffect(() => {
+    if (certsQuery.isError) notifyError(certsQuery.error);
+  }, [certsQuery.isError, certsQuery.error, notifyError]);
+  const certificates = certsQuery.data ?? [];
+  const validCerts = certificates.filter((cert) => cert.status === "valid").length;
+  const revokedCerts = certificates.filter((cert) => cert.status === "revoked").length;
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[560px]:grid-cols-2 xl:grid-cols-5">
         <StatCard
           icon={<IconCpu size={18} />}
           label="CPU"
@@ -42,6 +57,12 @@ export default function DashboardPage() {
           label="Clients online"
           value={metrics ? String(metrics.wsClients) : "—"}
           sub={metrics ? `server up ${formatUptime(metrics.uptimeSecs)}` : "waiting for data"}
+        />
+        <StatCard
+          icon={<IconShield size={18} />}
+          label="Certificates"
+          value={certsQuery.data ? String(certificates.length) : "—"}
+          sub={certsQuery.data ? `${validCerts} valid, ${revokedCerts} revoked` : "waiting for data"}
         />
       </div>
 

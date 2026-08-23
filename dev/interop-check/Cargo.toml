@@ -1,0 +1,13 @@
+[package]
+name = "interop-check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+axum = "0.8"
+hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
+instant-acme = { version = "0.8", features = ["rcgen"] }
+pem = "4"
+rustls-pki-types = "1"
+tokio = { version = "1", features = ["full"] }

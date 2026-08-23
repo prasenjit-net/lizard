@@ -17,7 +17,18 @@ import {
   IconDownload,
   IconTrash,
 } from "../icons";
-import { api, type Certificate, type CertificateDetail } from "../lib/api";
+import {
+  api,
+  type Account,
+  type AuthorizationInfo,
+  type Certificate,
+  type CertificateDetail,
+  type ChallengeInfo,
+  type Order,
+  type OrderStatus,
+} from "../lib/api";
+
+type Tone = "neutral" | "accent" | "ok" | "warn" | "err" | "info";
 
 const TH =
   "border-b border-line bg-surface-2 px-4 py-2.5 text-left font-mono text-[0.68rem] font-semibold tracking-wider text-ink-faint uppercase";
@@ -42,6 +53,28 @@ const REVOCATION_REASONS: Record<number, string> = {
 
 const EXPIRY_WARNING_DAYS = 30;
 
+const ORDER_STATUS_TONE: Record<OrderStatus, Tone> = {
+  pending: "neutral",
+  ready: "info",
+  processing: "info",
+  valid: "ok",
+  invalid: "err",
+};
+
+const AUTHZ_STATUS_TONE: Record<AuthorizationInfo["status"], Tone> = {
+  pending: "neutral",
+  valid: "ok",
+  invalid: "err",
+  expired: "warn",
+};
+
+const CHALLENGE_STATUS_TONE: Record<ChallengeInfo["status"], Tone> = {
+  pending: "neutral",
+  processing: "info",
+  valid: "ok",
+  invalid: "err",
+};
+
 function downloadTextFile(filename: string, contents: string) {
   const blob = new Blob([contents], { type: "application/x-pem-file" });
   const url = URL.createObjectURL(blob);
@@ -50,6 +83,27 @@ function downloadTextFile(filename: string, contents: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/** A truncated monospace id/thumbprint that copies its full value on click —
+ * used in the Accounts table where every column is otherwise too long to
+ * show in full. */
+function CopyableId({ value }: { value: string }) {
+  const { push } = useToast();
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    push("success", "Copied to clipboard");
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`${value} — click to copy`}
+      className="block max-w-[160px] cursor-pointer truncate font-mono text-[0.78rem] text-ink-muted hover:text-accent"
+    >
+      {value}
+    </button>
+  );
 }
 
 function CaRootCard() {
@@ -352,11 +406,311 @@ function CertificatesCard() {
   );
 }
 
+function OrderDetailPanel({ order }: { order: Order }) {
+  const { notifyError } = useToast();
+  const detailQuery = useQuery({
+    queryKey: ["order", order.id],
+    queryFn: () => api.getOrder(order.id),
+  });
+
+  useEffect(() => {
+    if (detailQuery.isError) notifyError(detailQuery.error);
+  }, [detailQuery.isError, detailQuery.error, notifyError]);
+
+  if (detailQuery.isError) {
+    return <p className="py-2 text-[0.86rem] text-err">Could not load this order.</p>;
+  }
+  const detail = detailQuery.data;
+  if (!detail) {
+    return (
+      <div className="flex flex-col gap-2 py-1">
+        <div className="skeleton" style={{ height: 16, width: 220 }} />
+        <div className="skeleton" style={{ height: 60 }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 py-1">
+      {detail.error ? (
+        <div className="rounded-lg border border-err-soft bg-err-soft/40 px-3 py-2 text-[0.8rem] text-err">
+          <div className="font-mono text-[0.7rem] font-semibold uppercase">{detail.error.type}</div>
+          <div>{detail.error.detail}</div>
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        {detail.authorizations.map((authz) => (
+          <div key={authz.id} className="rounded-lg border border-line bg-surface p-3">
+            <div className="flex items-center gap-2.5">
+              <span className="font-mono text-[0.82rem]">{authz.identifier}</span>
+              <Badge tone={AUTHZ_STATUS_TONE[authz.status]} dot>
+                {authz.status}
+              </Badge>
+              <span className="ml-auto font-mono text-[0.72rem] text-ink-faint">
+                expires {new Date(authz.expires).toLocaleString()}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-col gap-1.5 border-t border-line pt-2">
+              {authz.challenges.map((challenge) => (
+                <div key={challenge.id} className="flex flex-col gap-1 text-[0.8rem]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono text-ink-muted">{challenge.type}</span>
+                    <Badge tone={CHALLENGE_STATUS_TONE[challenge.status]}>{challenge.status}</Badge>
+                    {challenge.validatedAt ? (
+                      <span className="font-mono text-[0.72rem] text-ink-faint">
+                        validated {new Date(challenge.validatedAt).toLocaleString()}
+                      </span>
+                    ) : null}
+                  </div>
+                  {challenge.error ? (
+                    <div className="ml-1 rounded-md border border-err-soft bg-err-soft/40 px-2.5 py-1.5 text-[0.76rem] text-err">
+                      <span className="font-mono text-[0.68rem] font-semibold uppercase">
+                        {challenge.error.type}
+                      </span>{" "}
+                      {challenge.error.detail}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OrdersCard() {
+  const { notifyError } = useToast();
+  const queryClient = useQueryClient();
+  const { activities } = useLive();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const ordersQuery = useQuery({ queryKey: ["orders"], queryFn: api.listOrders });
+
+  useEffect(() => {
+    if (ordersQuery.isError) notifyError(ordersQuery.error);
+  }, [ordersQuery.isError, ordersQuery.error, notifyError]);
+
+  // Orders change on the same lifecycle events certificates do (new order,
+  // challenge validated, finalize, revoke) — reuse the "certificate"
+  // activity feed rather than adding another WebSocket message shape.
+  const latestActivity = useMemo(
+    () => activities.find((activity) => activity.kind === "certificate") ?? null,
+    [activities],
+  );
+  const lastSeenTimestamp = useRef(latestActivity?.timestampMs ?? null);
+  useEffect(() => {
+    if (latestActivity && latestActivity.timestampMs !== lastSeenTimestamp.current) {
+      lastSeenTimestamp.current = latestActivity.timestampMs;
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    }
+  }, [latestActivity, queryClient]);
+
+  const orders = ordersQuery.data;
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Orders</h2>
+        <span className="card-hint">every order this server has seen — click a row for details</span>
+      </div>
+      {orders === undefined ? (
+        ordersQuery.isError ? (
+          <p className="py-2 text-[0.86rem] text-err">Could not load orders.</p>
+        ) : (
+          <div className="flex flex-col gap-3 py-2">
+            <div className="skeleton" />
+            <div className="skeleton" />
+          </div>
+        )
+      ) : orders.length === 0 ? (
+        <p className="py-2 text-[0.86rem] text-ink-faint">
+          No orders yet — they'll show up here as soon as an ACME client requests one.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className={TH} />
+                <th className={TH}>Identifiers</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Created</th>
+                <th className={TH}>Expires</th>
+                <th className={TH}>Certificate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => {
+                const expanded = expandedId === order.id;
+                return (
+                  <Fragment key={order.id}>
+                    <tr
+                      className="cursor-pointer border-b border-line last:border-b-0 hover:bg-surface-2"
+                      onClick={() => setExpandedId(expanded ? null : order.id)}
+                      aria-expanded={expanded}
+                    >
+                      <td className={`${TD} w-8`}>
+                        <IconChevronRight
+                          size={14}
+                          className={`text-ink-faint transition-transform ${expanded ? "rotate-90" : ""}`}
+                        />
+                      </td>
+                      <td className={TD}>
+                        {order.identifiers.map((name) => (
+                          <div key={name} className="font-mono text-[0.82rem]">
+                            {name}
+                          </div>
+                        ))}
+                      </td>
+                      <td className={TD}>
+                        <Badge tone={ORDER_STATUS_TONE[order.status]} dot>
+                          {order.status}
+                        </Badge>
+                      </td>
+                      <td className={`${TD} text-[0.82rem] text-ink-muted`}>
+                        {new Date(order.createdAt).toLocaleString()}
+                      </td>
+                      <td className={`${TD} text-[0.82rem] text-ink-muted`}>
+                        {new Date(order.expires).toLocaleString()}
+                      </td>
+                      <td className={`${TD} font-mono text-[0.78rem] text-ink-faint`}>
+                        {order.certificateId ? order.certificateId : "—"}
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr className="border-b border-line bg-surface-2/40 last:border-b-0">
+                        <td className={TD} />
+                        <td className={TD} colSpan={5}>
+                          <OrderDetailPanel order={order} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AccountsCard() {
+  const { notifyError } = useToast();
+  const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
+
+  useEffect(() => {
+    if (accountsQuery.isError) notifyError(accountsQuery.error);
+  }, [accountsQuery.isError, accountsQuery.error, notifyError]);
+
+  const accounts = accountsQuery.data;
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Accounts</h2>
+        <span className="card-hint">ACME accounts registered with this server</span>
+      </div>
+      {accounts === undefined ? (
+        accountsQuery.isError ? (
+          <p className="py-2 text-[0.86rem] text-err">Could not load accounts.</p>
+        ) : (
+          <div className="flex flex-col gap-3 py-2">
+            <div className="skeleton" />
+            <div className="skeleton" />
+          </div>
+        )
+      ) : accounts.length === 0 ? (
+        <p className="py-2 text-[0.86rem] text-ink-faint">
+          No accounts yet — they'll show up here as soon as an ACME client registers.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className={TH}>Id</th>
+                <th className={TH}>Thumbprint</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Contact</th>
+                <th className={TH}>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accounts.map((account: Account) => (
+                <tr key={account.id} className="border-b border-line last:border-b-0 hover:bg-surface-2">
+                  <td className={TD}>
+                    <CopyableId value={account.id} />
+                  </td>
+                  <td className={TD}>
+                    <CopyableId value={account.jwkThumbprint} />
+                  </td>
+                  <td className={TD}>
+                    <Badge tone={account.status === "valid" ? "ok" : "neutral"} dot>
+                      {account.status}
+                    </Badge>
+                  </td>
+                  <td className={`${TD} text-[0.82rem] text-ink-muted`}>
+                    {account.contact.length > 0 ? account.contact.join(", ") : "—"}
+                  </td>
+                  <td className={`${TD} text-[0.82rem] text-ink-muted`}>
+                    {new Date(account.createdAt).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type TabId = "certificates" | "orders" | "accounts";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "certificates", label: "Certificates" },
+  { id: "orders", label: "Orders" },
+  { id: "accounts", label: "Accounts" },
+];
+
+function TabBar({ active, onChange }: { active: TabId; onChange: (id: TabId) => void }) {
+  return (
+    <div role="tablist" className="flex gap-1 border-b border-line">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          role="tab"
+          type="button"
+          aria-selected={active === tab.id}
+          onClick={() => onChange(tab.id)}
+          className={[
+            "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+            active === tab.id
+              ? "border-accent text-accent"
+              : "border-transparent text-ink-muted hover:text-ink",
+          ].join(" ")}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function CertificatesPage() {
+  const [tab, setTab] = useState<TabId>("certificates");
+
   return (
     <div className="flex flex-col gap-4">
       <CaRootCard />
-      <CertificatesCard />
+      <TabBar active={tab} onChange={setTab} />
+      {tab === "certificates" ? <CertificatesCard /> : null}
+      {tab === "orders" ? <OrdersCard /> : null}
+      {tab === "accounts" ? <AccountsCard /> : null}
     </div>
   );
 }

@@ -258,6 +258,66 @@ async fn revoking_an_unknown_certificate_is_not_found() {
 }
 
 #[tokio::test]
+async fn get_certificate_for_unknown_id_is_not_found() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/certificates/does-not-exist"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res).await;
+    assert_eq!(body["error"]["code"], "NOT_FOUND");
+}
+
+#[tokio::test]
+async fn config_exposes_ca_validity_settings() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/config"))
+        .await
+        .unwrap();
+    let body = body_json(res).await;
+    assert_eq!(body["ca"]["certValidityDays"], 90);
+    assert_eq!(body["ca"]["rootValidityYears"], 10);
+}
+
+#[tokio::test]
+async fn list_orders_starts_empty() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/orders"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn get_order_for_unknown_id_is_not_found() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/orders/does-not-exist"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res).await;
+    assert_eq!(body["error"]["code"], "NOT_FOUND");
+}
+
+#[tokio::test]
+async fn list_accounts_starts_empty() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/accounts"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn unknown_api_route_returns_json_404_not_the_spa_shell() {
     let app = test_app().await;
     let res = app

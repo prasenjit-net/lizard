@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS certificates (
     -- untrusted client input required to pull a serial back out of it.
     der_sha256        TEXT NOT NULL UNIQUE,
     pem_chain         TEXT NOT NULL,
+    not_before        TEXT NOT NULL,
+    not_after         TEXT NOT NULL,
     issued_at         TEXT NOT NULL,
     revoked_at        TEXT,
     revocation_reason INTEGER

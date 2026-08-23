@@ -319,14 +319,17 @@ pub async fn finalize_order(
         let mut conn = state.db.conn();
         let tx = conn.transaction()?;
         tx.execute(
-            "INSERT INTO certificates (id, order_id, serial, der_sha256, pem_chain, issued_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO certificates \
+             (id, order_id, serial, der_sha256, pem_chain, not_before, not_after, issued_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 certificate_id,
                 order.id,
                 issued.serial,
                 der_sha256,
                 issued.pem,
+                issued.not_before,
+                issued.not_after,
                 now
             ],
         )?;

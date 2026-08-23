@@ -144,8 +144,10 @@ mod tests {
         // A certificate can only reference an order that already exists,
         // and only afterward does the order get pointed back at it.
         conn.execute(
-            "INSERT INTO certificates (id, order_id, serial, der_sha256, pem_chain, issued_at) \
-             VALUES ('cert-1', 'order-1', 'aa:bb:cc', 'hash-1', 'PEM', '2026-01-01T01:00:00Z')",
+            "INSERT INTO certificates \
+             (id, order_id, serial, der_sha256, pem_chain, not_before, not_after, issued_at) \
+             VALUES ('cert-1', 'order-1', 'aa:bb:cc', 'hash-1', 'PEM', \
+                     '2026-01-01T00:00:00Z', '2026-04-01T00:00:00Z', '2026-01-01T01:00:00Z')",
             [],
         )
         .unwrap();

@@ -19,7 +19,7 @@ mime_guess = "2"
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 rcgen = { version = "0.14.9", features = ["x509-parser"] }
-time = "0.3"
+time = { version = "0.3", features = ["formatting"] }
 rustls-pki-types = "1.15.1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 ring = "0.17.14"

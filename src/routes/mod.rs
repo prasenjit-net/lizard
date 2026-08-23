@@ -23,10 +23,14 @@ pub fn router(state: SharedState) -> Router {
         .route("/api/error-demo", get(api::error_demo))
         .route("/api/ca", get(api::ca_info))
         .route("/api/certificates", get(api::list_certificates))
+        .route("/api/certificates/{id}", get(api::get_certificate))
         .route(
             "/api/certificates/{id}/revoke",
             post(api::revoke_certificate),
         )
+        .route("/api/orders", get(api::list_orders))
+        .route("/api/orders/{id}", get(api::get_order))
+        .route("/api/accounts", get(api::list_accounts))
         .route("/ws", get(ws::handler))
         // The one URL an ACME client is expected to know in advance —
         // unauthenticated, unnested, so it stays reachable at the bare

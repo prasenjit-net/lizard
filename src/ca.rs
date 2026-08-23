@@ -7,10 +7,11 @@ use rcgen::{
     DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose, SerialNumber,
 };
 use rustls_pki_types::CertificateSigningRequestDer;
+use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
 
 use crate::config::CaConfig;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 
 /// A freshly issued leaf certificate: its PEM encoding (for storage/
 /// download), the serial number rcgen assigned it (so callers can record
@@ -22,6 +23,12 @@ pub struct IssuedCertificate {
     pub pem: String,
     pub serial: String,
     pub der: Vec<u8>,
+    /// RFC 3339, matching the validity window actually embedded in the
+    /// certificate (the exact `now`/`now + validity_days` this method
+    /// signed with) rather than a value the caller would otherwise have
+    /// to recompute and hope stays in sync.
+    pub not_before: String,
+    pub not_after: String,
 }
 
 /// Owns the CA's root keypair + certificate and signs leaf certificates
@@ -92,11 +99,22 @@ impl Ca {
         csr_params.params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
         csr_params.params.use_authority_key_identifier_extension = true;
 
+        let not_before = now
+            .format(&Rfc3339)
+            .map_err(|err| AppError::Internal(format!("failed to format not_before: {err}")))?;
+        let not_after = csr_params
+            .params
+            .not_after
+            .format(&Rfc3339)
+            .map_err(|err| AppError::Internal(format!("failed to format not_after: {err}")))?;
+
         let cert = csr_params.signed_by(&self.issuer)?;
         Ok(IssuedCertificate {
             pem: cert.pem(),
             serial: serial.to_string(),
             der: cert.der().to_vec(),
+            not_before,
+            not_after,
         })
     }
 }
@@ -211,6 +229,7 @@ mod tests {
         assert!(leaf_pem.contains("BEGIN CERTIFICATE"));
         assert!(!issued.serial.is_empty());
         assert!(!issued.der.is_empty());
+        assert!(issued.not_before < issued.not_after);
 
         // Re-parse the root and leaf and confirm the leaf's issuer really
         // is this CA — a wrong-key or wrong-params bug would otherwise

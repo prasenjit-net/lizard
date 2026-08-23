@@ -1,6 +1,7 @@
 mod access_log;
 mod ca;
 mod config;
+mod db;
 mod error;
 mod routes;
 mod services;

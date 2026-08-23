@@ -7,6 +7,7 @@ use tokio::sync::{broadcast, RwLock};
 use crate::access_log::AccessLog;
 use crate::ca::Ca;
 use crate::config::AppConfig;
+use crate::db::Db;
 use crate::error::AppResult;
 use crate::services::events::Event;
 use crate::services::metrics::MetricsSnapshot;
@@ -17,10 +18,13 @@ pub struct AppState {
     /// Fan-out channel feeding every connected WebSocket client.
     pub events: broadcast::Sender<Event>,
     pub tasks: TaskStore,
-    // Not read anywhere yet — the ACME/admin handlers that use it land in
-    // later milestones. See the module doc comment on `crate::ca`.
+    // Not read anywhere yet — the ACME/admin handlers that use them land
+    // in later milestones. See the module doc comments on `crate::ca` and
+    // `crate::db`.
     #[allow(dead_code)]
     pub ca: Ca,
+    #[allow(dead_code)]
+    pub db: Db,
     pub latest_metrics: RwLock<Option<MetricsSnapshot>>,
     pub requests_total: AtomicU64,
     pub ws_clients: AtomicUsize,
@@ -36,10 +40,12 @@ impl AppState {
         let (events, _) = broadcast::channel(64);
         let access_log = AccessLog::open(config.logging.access_log.as_deref()).await;
         let ca = Ca::load_or_generate(&config.ca)?;
+        let db = Db::open(&config.ca.db_path)?;
         Ok(Self {
             events,
             tasks: TaskStore::with_examples(),
             ca,
+            db,
             latest_metrics: RwLock::new(None),
             requests_total: AtomicU64::new(0),
             ws_clients: AtomicUsize::new(0),

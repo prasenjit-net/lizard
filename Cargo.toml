@@ -21,6 +21,7 @@ rand = "0.8"
 rcgen = { version = "0.14.9", features = ["x509-parser"] }
 time = "0.3"
 rustls-pki-types = "1.15.1"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

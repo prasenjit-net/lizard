@@ -54,8 +54,12 @@ async fn acme_not_found() -> error::AcmeError {
 /// nonce itself comes from `attach_replay_nonce` below, same as on every
 /// other `/acme/*` response; this handler only needs to exist so there's
 /// something for that middleware to attach it to.
+///
+/// Must be 200, not 204 — the RFC's own example response for this
+/// endpoint is `200 OK`, and at least one real client (`instant-acme`)
+/// checks for exactly that status and errors out otherwise.
 async fn new_nonce() -> StatusCode {
-    StatusCode::NO_CONTENT
+    StatusCode::OK
 }
 
 /// RFC 8555 §6.5 — every response from an ACME resource carries a fresh

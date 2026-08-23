@@ -84,11 +84,34 @@ success or error, and errors use `application/problem+json`
 
 ## Interoperability
 
-Verified against independently-implemented clients during development (see
-commit history for the milestone-by-milestone smoke tests): a
-Python/`cryptography`-based client exercising the full account → order →
-http-01 → finalize → download → revoke flow, with the returned certificate
-chain independently verified against the CA root's public key. Running a
-real production ACME client (`certbot`, `acme.sh`) against a live instance
-is still open — see the implementation plan for the "interop hardening"
-milestone.
+Verified against two independently-implemented clients during development
+(see commit history for the milestone-by-milestone smoke tests):
+
+- A Python/`cryptography`-based script exercising the full account → order →
+  http-01 → finalize → download → revoke flow, with the returned certificate
+  chain independently verified against the CA root's public key.
+- [`instant-acme`](https://docs.rs/instant-acme) (a real, independently
+  maintained Rust ACME client — not code this project owns) driving the same
+  full flow end to end, including revocation, against a live instance.
+  `instant-acme`'s default HTTP client is TLS-only; since this server speaks
+  plain HTTP by design (see "In-process TLS" above), the check supplies a
+  custom `hyper` client instead of fighting that default — the check is
+  still exercising this server's real ACME wire protocol, just over `http://`
+  rather than `https://`.
+
+  **This run caught and fixed a real conformance bug**: `GET`/`HEAD
+  /acme/new-nonce` returned `204 No Content`. RFC 8555 §7.2's own example
+  response for that endpoint is `200 OK`, and `instant-acme` — correctly —
+  treats any other status as an error. None of this project's own
+  hand-written tests or the Python smoke script caught it, because neither
+  asserted the exact status code on that one endpoint, only that a
+  `Replay-Nonce` header was present. Fixed in `src/acme/mod.rs`. This is
+  exactly the kind of gap a real independent client is for.
+
+`certbot`'s `--standalone` mode was not used for this: it needs to bind port
+80 for its own challenge responder (ACME http-01 identifiers never carry a
+port, so there's no client-side flag to change this), which needs root and
+wasn't worth the escalation for a local check. A real certbot/acme.sh run
+against a routable hostname (or with sudo) is still open as a possible
+follow-up, but the two independent clients above already cover the protocol
+surface certbot would exercise.

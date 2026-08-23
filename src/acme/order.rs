@@ -310,6 +310,8 @@ pub async fn finalize_order(
     let issued = state
         .ca
         .sign_csr(&csr_der, state.config.ca.cert_validity_days)?;
+    let der_sha256 =
+        URL_SAFE_NO_PAD.encode(ring::digest::digest(&ring::digest::SHA256, &issued.der));
 
     let certificate_id = Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -317,9 +319,16 @@ pub async fn finalize_order(
         let mut conn = state.db.conn();
         let tx = conn.transaction()?;
         tx.execute(
-            "INSERT INTO certificates (id, order_id, serial, pem_chain, issued_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![certificate_id, order.id, issued.serial, issued.pem, now],
+            "INSERT INTO certificates (id, order_id, serial, der_sha256, pem_chain, issued_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                certificate_id,
+                order.id,
+                issued.serial,
+                der_sha256,
+                issued.pem,
+                now
+            ],
         )?;
         tx.execute(
             "UPDATE orders SET status = 'valid', certificate_id = ?1 WHERE id = ?2",

@@ -35,3 +35,7 @@ pub fn challenge(state: &SharedState, id: &str) -> String {
 pub fn certificate(state: &SharedState, id: &str) -> String {
     format!("{}/acme/cert/{id}", state.external_base_url)
 }
+
+pub fn revoke_cert(state: &SharedState) -> String {
+    format!("{}/acme/revoke-cert", state.external_base_url)
+}

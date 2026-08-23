@@ -14,7 +14,7 @@ pub async fn directory(State(state): State<SharedState>) -> Json<Value> {
         "newNonce": format!("{base}/acme/new-nonce"),
         "newAccount": urls::new_account(&state),
         "newOrder": urls::new_order(&state),
-        "revokeCert": format!("{base}/acme/revoke-cert"),
+        "revokeCert": urls::revoke_cert(&state),
         "keyChange": format!("{base}/acme/key-change"),
     }))
 }

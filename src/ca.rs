@@ -12,12 +12,16 @@ use time::{Duration, OffsetDateTime};
 use crate::config::CaConfig;
 use crate::error::AppResult;
 
-/// A freshly issued leaf certificate and the serial number rcgen assigned
-/// it, so callers can record the *actual* embedded serial rather than
-/// inventing their own identifier for the same certificate.
+/// A freshly issued leaf certificate: its PEM encoding (for storage/
+/// download), the serial number rcgen assigned it (so callers can record
+/// the *actual* embedded serial rather than inventing their own id for
+/// the same certificate), and the raw DER (so callers can hash it —
+/// revocation matches a client-submitted certificate back to a stored
+/// row by DER hash rather than parsing ASN.1 out of untrusted input).
 pub struct IssuedCertificate {
     pub pem: String,
     pub serial: String,
+    pub der: Vec<u8>,
 }
 
 /// Owns the CA's root keypair + certificate and signs leaf certificates
@@ -97,6 +101,7 @@ impl Ca {
         Ok(IssuedCertificate {
             pem: cert.pem(),
             serial: serial.to_string(),
+            der: cert.der().to_vec(),
         })
     }
 }
@@ -210,6 +215,7 @@ mod tests {
 
         assert!(leaf_pem.contains("BEGIN CERTIFICATE"));
         assert!(!issued.serial.is_empty());
+        assert!(!issued.der.is_empty());
 
         // Re-parse the root and leaf and confirm the leaf's issuer really
         // is this CA — a wrong-key or wrong-params bug would otherwise

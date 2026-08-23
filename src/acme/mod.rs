@@ -37,6 +37,7 @@ pub fn router(state: SharedState) -> Router<SharedState> {
         .route("/authz/{id}", post(authz::get_authz))
         .route("/challenge/{id}", post(challenge::respond_challenge))
         .route("/cert/{id}", post(cert::download_certificate))
+        .route("/revoke-cert", post(cert::revoke_cert))
         // Without its own fallback, an unmatched /acme/* path falls
         // through to the outer router's fallback — the SPA/static-asset
         // handler — and an ACME client gets an HTML page (or a 503 "UI

@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS certificates (
     id                TEXT PRIMARY KEY,
     order_id          TEXT NOT NULL,
     serial            TEXT NOT NULL UNIQUE,
+    -- SHA-256 of the raw DER bytes, base64url. A revoke-cert request
+    -- carries the certificate's own DER, not its id or serial, so this is
+    -- how that request gets matched back to a row — no ASN.1 parsing of
+    -- untrusted client input required to pull a serial back out of it.
+    der_sha256        TEXT NOT NULL UNIQUE,
     pem_chain         TEXT NOT NULL,
     issued_at         TEXT NOT NULL,
     revoked_at        TEXT,

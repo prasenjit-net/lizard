@@ -219,6 +219,45 @@ async fn error_demo_kinds_map_to_the_right_status_and_code() {
 }
 
 #[tokio::test]
+async fn ca_info_returns_a_pem_encoded_root_cert() {
+    let app = test_app().await;
+    let res = app.oneshot(request(Method::GET, "/api/ca")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert!(body["rootCertPem"]
+        .as_str()
+        .unwrap()
+        .contains("BEGIN CERTIFICATE"));
+}
+
+#[tokio::test]
+async fn list_certificates_starts_empty() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/certificates"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn revoking_an_unknown_certificate_is_not_found() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(
+            Method::POST,
+            "/api/certificates/does-not-exist/revoke",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res).await;
+    assert_eq!(body["error"]["code"], "NOT_FOUND");
+}
+
+#[tokio::test]
 async fn unknown_api_route_returns_json_404_not_the_spa_shell() {
     let app = test_app().await;
     let res = app

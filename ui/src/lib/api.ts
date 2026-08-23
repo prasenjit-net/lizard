@@ -32,6 +32,20 @@ export interface Task {
   createdAt: string;
 }
 
+export interface CaInfo {
+  rootCertPem: string;
+}
+
+export interface Certificate {
+  id: string;
+  orderId: string;
+  identifiers: string[];
+  serial: string;
+  status: "valid" | "revoked";
+  issuedAt: string;
+  revokedAt: string | null;
+}
+
 export class ApiError extends Error {
   readonly code: string;
   readonly status: number;
@@ -95,4 +109,8 @@ export const api = {
   errorDemo: (kind: string) => request<never>(`/api/error-demo?kind=${kind}`),
   /** Hits an endpoint that does not exist — demonstrates the JSON 404. */
   missing: () => request<never>("/api/this-endpoint-does-not-exist"),
+  caInfo: () => request<CaInfo>("/api/ca"),
+  listCertificates: () => request<Certificate[]>("/api/certificates"),
+  revokeCertificate: (id: string) =>
+    request<void>(`/api/certificates/${id}/revoke`, { method: "POST" }),
 };

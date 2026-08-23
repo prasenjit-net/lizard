@@ -27,10 +27,6 @@ pub struct IssuedCertificate {
 /// Owns the CA's root keypair + certificate and signs leaf certificates
 /// from client-submitted CSRs.
 pub struct Ca {
-    // Not read anywhere yet — the admin "view/download root cert" endpoint
-    // is a later milestone. `root_cert_pem()` below is exercised directly
-    // by this module's own tests in the meantime.
-    #[allow(dead_code)]
     root_cert_pem: String,
     issuer: Issuer<'static, KeyPair>,
 }
@@ -67,7 +63,6 @@ impl Ca {
 
     /// The root CA certificate in PEM format, for installing into trust
     /// stores or serving to operators.
-    #[allow(dead_code)]
     pub fn root_cert_pem(&self) -> &str {
         &self.root_cert_pem
     }

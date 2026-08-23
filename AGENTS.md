@@ -14,14 +14,17 @@ Guidance for coding agents working in this repository.
 
 - `src/main.rs` wires CLI parsing, configuration, logging, application state, routes, and server startup.
 - `src/config.rs` defines TOML configuration and CLI overrides.
-- `src/error.rs` defines the shared API error envelope.
+- `src/error.rs` defines the shared API error envelope (`AppError`, used by `/api/*`).
 - `src/static_assets.rs` serves embedded SPA assets and fallback routing.
-- `src/routes/` contains REST and WebSocket route handlers.
+- `src/ca.rs` owns the root CA keypair/certificate and signs leaf certificates from CSRs (`rcgen`).
+- `src/db.rs` + `src/schema.sql` are the SQLite store for ACME state (accounts, orders, authorizations, challenges, certificates).
+- `src/acme/` implements RFC 8555: `jws.rs` (flattened-JSON JWS verification), `nonce.rs` (in-memory anti-replay), `directory.rs`, `account.rs`, `order.rs`, `authz.rs`, `challenge.rs` (real http-01 validation via a background task), `cert.rs` (download + revoke), `error.rs` (`AcmeError`, a separate `application/problem+json` envelope from `AppError`), `urls.rs`. See `ACME.md` for the protocol-level reference and known gaps.
+- `src/routes/` contains REST and WebSocket route handlers (`api.rs`, `ws.rs`), and nests `acme::router()` under `/acme/*`.
 - `src/services/` contains metrics, task storage, and event broadcasting.
 - `ui/src/lib/api.ts` is the typed frontend API client.
 - `ui/src/context/` contains Theme, Toast, Config, and WebSocket live data providers.
 - `ui/src/components/` contains reusable UI components.
-- `ui/src/pages/` contains route pages.
+- `ui/src/pages/` contains route pages, including `Certificates.tsx` (CA root cert + issued-certificate table with revoke, live-updating over `/ws`).
 - `ui/src/styles/index.css` contains Tailwind entrypoint and theme tokens.
 
 ## Common Commands
@@ -57,8 +60,9 @@ Development servers:
 
 ## Implementation Notes
 
-- Keep API responses using the existing `AppError` / JSON error envelope pattern.
+- Keep `/api/*` responses using the existing `AppError` / JSON error envelope pattern. `/acme/*` handlers use a deliberately separate `AcmeError` (`application/problem+json`) — do not mix the two envelopes.
 - Add new REST handlers in `src/routes/api.rs`, register routes in `src/routes/mod.rs`, and expose typed frontend calls from `ui/src/lib/api.ts`.
+- Add new ACME handlers under `src/acme/`, following the existing pattern: `jws::parse_and_check_nonce` → `account::authenticate` (or the embedded `jwk` for new-account) → DB read/write → `super::urls` for any resource URL. See `ACME.md` before touching protocol behavior — several details (nonce handling, ownership-check status codes, SAN matching) are correctness-load-bearing, not stylistic.
 - Add new WebSocket event types in `src/services/events.rs` and handle them in `ui/src/context/LiveContext.tsx`.
 - Add new pages under `ui/src/pages/`, then update routing and navigation in the existing frontend structure.
 - Keep UI styling aligned with the tokens in `ui/src/styles/index.css`; avoid hard-coded one-off colors when a token exists.

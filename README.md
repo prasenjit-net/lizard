@@ -11,12 +11,25 @@ Built as a single binary: an [Axum](https://github.com/tokio-rs/axum)
 REST + WebSocket backend with a React (Vite + TypeScript) SPA embedded straight
 into the executable. Build once, ship one file.
 
-> **Status:** early development — the ACME endpoints and CA machinery are not
-> implemented yet; what exists today is the application foundation described
-> below.
+> **Status:** the core ACME (RFC 8555) protocol works end to end — account
+> registration, orders, http-01 validation, finalize, certificate download,
+> and revocation — against a private root CA this server generates on first
+> run. Not yet implemented: dns-01/tls-alpn-01 challenges (so no wildcard
+> certs), key rollover, external account binding, and in-process TLS
+> termination for the ACME endpoints themselves (run this behind a
+> TLS-terminating reverse proxy, or set `[server].base_url` to whatever
+> external HTTPS URL that proxy exposes).
 
 ## Features
 
+- **ACME (RFC 8555) server** — `/directory` + `/acme/*`: new-account,
+  new-order, http-01 challenge validation (a real outbound fetch, not a
+  stub), finalize, certificate download, and revocation, all backed by a
+  private root CA this server owns. See [`ACME.md`](ACME.md) for the
+  protocol details, correctness invariants, and known gaps.
+- **Certificates admin page** — the CA's root certificate (copy/download for
+  trust-store installation) and every issued certificate with its status and
+  a revoke action, live-updating over the same WebSocket the dashboard uses
 - **REST backend** — Axum with a typed error framework (`AppError` → consistent
   JSON error envelope on every endpoint)
 - **Embedded SPA** — `ui/dist` is compiled into the binary with `rust-embed`;
@@ -131,7 +144,14 @@ should accept certificates this server issues.
 | POST | `/api/tasks/{id}/toggle` | Toggle done |
 | DELETE | `/api/tasks/{id}` | Delete (204) |
 | GET | `/api/error-demo?kind=…` | Always fails (`internal`, `bad-request`, `not-found`) |
+| GET | `/api/ca` | CA root certificate (`{"rootCertPem": "…"}`) |
+| GET | `/api/certificates` | Every certificate this server has issued, newest first |
+| POST | `/api/certificates/{id}/revoke` | Operator-triggered revocation (204) |
 | GET | `/ws` | WebSocket: server-push events |
+
+The ACME protocol endpoints (`/directory`, `/acme/*`) are a separate
+surface with their own JWS authentication and `application/problem+json`
+error shape — see [`ACME.md`](ACME.md).
 
 Errors always look like:
 
@@ -144,6 +164,7 @@ WebSocket events are JSON discriminated by `type`:
 ```json
 { "type": "metrics",  "data": { "cpu": 41.3, "memory": 58.0, "...": "…" } }
 { "type": "activity", "kind": "task", "message": "Task \"x\" created", "timestampMs": 0 }
+{ "type": "activity", "kind": "certificate", "message": "issued a certificate for example.internal", "timestampMs": 0 }
 { "type": "hello",    "message": "Connected to Lizard v0.1.0", "timestampMs": 0 }
 ```
 
@@ -151,14 +172,19 @@ WebSocket events are JSON discriminated by `type`:
 
 ```
 ├── config.toml               server + UI configuration
+├── ACME.md                   ACME protocol implementation notes
 ├── src/
 │   ├── main.rs               CLI (clap) + startup
 │   ├── config.rs             TOML config model
 │   ├── error.rs              AppError → JSON error envelope
 │   ├── access_log.rs         access-log middleware (console + file)
 │   ├── static_assets.rs      embedded SPA + fallback routing
-│   ├── routes/               api.rs (REST) · ws.rs (server push)
-│   └── services/             metrics.rs · tasks.rs · events.rs
+│   ├── ca.rs                 root CA bootstrap + CSR signing (rcgen)
+│   ├── db.rs, schema.sql     SQLite store for ACME state
+│   ├── acme/                 directory, jws, nonce, account, order,
+│   │                         authz, challenge, cert, error, urls
+│   ├── routes/                api.rs (REST) · ws.rs (server push)
+│   └── services/              metrics.rs · tasks.rs · events.rs
 └── ui/
     ├── public/favicon.svg    the gear-and-bolt mark
     └── src/
@@ -166,7 +192,8 @@ WebSocket events are JSON discriminated by `type`:
         ├── icons/            the icon pack (add icons here)
         ├── context/          Theme · Toast · Config · Live(WebSocket)
         ├── components/       layout, cards, chart, feed, controls
-        ├── pages/            Dashboard · Components · Settings · 404
+        ├── pages/            Dashboard · Certificates · Components ·
+        │                     Settings · 404
         └── styles/           index.css (Tailwind v4 entry + theme tokens)
 ```
 
@@ -176,7 +203,7 @@ WebSocket events are JSON discriminated by `type`:
 `AppResult<Json<T>>`, register it in `src/routes/mod.rs`, add a typed wrapper
 in `ui/src/lib/api.ts`.
 
-**New page** — create `ui/src/pages/X.tsx`, add a `<Route>` in `App.tsx` and a
+**New page** — create `ui/src/pages/X.tsx`, add a route in `router.tsx` and a
 nav item in `components/Sidebar.tsx` (plus a title in `Topbar.tsx`).
 
 **New server-push event** — add a variant to `Event` in

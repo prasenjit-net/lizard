@@ -1,16 +1,18 @@
 import type { ReactElement } from "react";
 import type { Activity } from "../context/LiveContext";
-import { IconActivity, IconBolt, IconCheckCircle } from "../icons";
+import { IconActivity, IconBolt, IconCheckCircle, IconShield } from "../icons";
 import { timeAgo } from "../lib/format";
 
 const KIND_ICON: Record<string, ReactElement> = {
   task: <IconCheckCircle size={16} />,
   socket: <IconBolt size={16} />,
+  certificate: <IconShield size={16} />,
 };
 
 const KIND_TONE: Record<string, string> = {
   task: "text-ok",
   socket: "text-info",
+  certificate: "text-accent",
 };
 
 export default function ActivityFeed({ activities }: { activities: Activity[] }) {

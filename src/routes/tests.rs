@@ -23,11 +23,15 @@ async fn test_app() -> Router {
     // real `data/ca/` — otherwise every test run would generate (and race
     // on) files in the working directory.
     let dir = tempfile::TempDir::new().unwrap();
+    let dir_path = dir.path().to_path_buf();
+    // The router owns the SQLite connection, but SQLite still needs the
+    // containing directory to exist for later writes during the test.
+    std::mem::forget(dir);
     let config = AppConfig {
         ca: crate::config::CaConfig {
-            root_cert_path: dir.path().join("root-cert.pem"),
-            root_key_path: dir.path().join("root-key.pem"),
-            db_path: dir.path().join("lizard.db"),
+            root_cert_path: dir_path.join("root-cert.pem"),
+            root_key_path: dir_path.join("root-key.pem"),
+            db_path: dir_path.join("lizard.db"),
             ..AppConfig::default().ca
         },
         ..AppConfig::default()
@@ -108,6 +112,18 @@ async fn tasks_seed_list_has_three_items() {
 }
 
 #[tokio::test]
+async fn activity_log_starts_empty() {
+    let app = test_app().await;
+    let res = app
+        .oneshot(request(Method::GET, "/api/activity"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn create_task_then_list_reflects_it() {
     let app = test_app().await;
 
@@ -131,6 +147,35 @@ async fn create_task_then_list_reflects_it() {
         .unwrap();
     let body = body_json(list).await;
     assert_eq!(body.as_array().unwrap().len(), 4);
+}
+
+#[tokio::test]
+async fn mutations_create_activity_log_entries() {
+    let app = test_app().await;
+
+    let create = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/tasks",
+            serde_json::json!({ "title": "Write audit tests" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(create.status(), StatusCode::CREATED);
+
+    let activity = app
+        .oneshot(request(Method::GET, "/api/activity"))
+        .await
+        .unwrap();
+    assert_eq!(activity.status(), StatusCode::OK);
+    let body = body_json(activity).await;
+    let entries = body.as_array().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["kind"], "task");
+    assert_eq!(entries[0]["summary"], "Task \"Write audit tests\" created");
+    assert!(entries[0]["createdAt"].is_string());
+    assert!(entries[0]["timestampMs"].is_number());
 }
 
 #[tokio::test]

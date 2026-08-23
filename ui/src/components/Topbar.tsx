@@ -6,6 +6,10 @@ import ThemeToggle from "./ThemeToggle";
 const TITLES: Record<string, string> = {
   "/": "Dashboard",
   "/certificates": "Certificates",
+  "/orders": "Orders",
+  "/accounts": "Accounts",
+  "/activity": "Activity Log",
+  "/certificate-authority": "Certificate Authority",
   "/components": "Components",
   "/settings": "Settings",
 };

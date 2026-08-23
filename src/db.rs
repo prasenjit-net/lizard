@@ -67,6 +67,7 @@ mod tests {
             "authorizations",
             "challenges",
             "certificates",
+            "activity_log",
         ] {
             let count: i64 = conn
                 .query_row(

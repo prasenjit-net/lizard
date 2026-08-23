@@ -1,25 +1,29 @@
 import type { ReactElement } from "react";
 import type { Activity } from "../context/LiveContext";
-import { IconActivity, IconBolt, IconCheckCircle, IconShield } from "../icons";
+import { IconActivity, IconBolt, IconCheckCircle, IconFileText, IconShield } from "../icons";
 import { timeAgo } from "../lib/format";
 
 const KIND_ICON: Record<string, ReactElement> = {
   task: <IconCheckCircle size={16} />,
   socket: <IconBolt size={16} />,
   certificate: <IconShield size={16} />,
+  order: <IconFileText size={16} />,
 };
 
 const KIND_TONE: Record<string, string> = {
   task: "text-ok",
   socket: "text-info",
   certificate: "text-accent",
+  order: "text-info",
+  challenge: "text-warn",
+  account: "text-ok",
 };
 
 export default function ActivityFeed({ activities }: { activities: Activity[] }) {
   if (activities.length === 0) {
     return (
       <p className="py-2 text-[0.86rem] text-ink-faint">
-        Server events will appear here — try adding a task.
+        Server events will appear here as ACME clients interact with this server.
       </p>
     );
   }

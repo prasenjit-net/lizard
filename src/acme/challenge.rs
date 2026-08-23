@@ -141,6 +141,13 @@ pub async fn respond_challenge(
         challenge.status = "processing".to_string();
 
         let key_authorization = format!("{}.{}", challenge.token, account.jwk.thumbprint()?);
+        state.activity(
+            "challenge",
+            format!(
+                "started http-01 validation for \"{}\"",
+                authz.identifier.value
+            ),
+        );
         spawn_validation(state.clone(), challenge.clone(), authz, key_authorization);
     }
 

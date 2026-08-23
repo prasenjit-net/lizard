@@ -15,6 +15,7 @@ import {
   IconChevronRight,
   IconCopy,
   IconDownload,
+  IconSearch,
   IconTrash,
 } from "../icons";
 import {
@@ -106,7 +107,7 @@ function CopyableId({ value }: { value: string }) {
   );
 }
 
-function CaRootCard() {
+export function CaRootCard() {
   const { push, notifyError } = useToast();
   const caQuery = useQuery({ queryKey: ["ca"], queryFn: api.caInfo });
 
@@ -161,6 +162,67 @@ function expiryStatus(notAfter: string): { tone: "ok" | "warn" | "err"; label: s
     return { tone: "warn", label: `Expires in ${Math.ceil(daysLeft)}d` };
   }
   return { tone: "ok", label: `Expires in ${Math.ceil(daysLeft)}d` };
+}
+
+function matchesSearch(values: string[], search: string) {
+  const term = search.trim().toLowerCase();
+  if (!term) return true;
+  return values.some((value) => value.toLowerCase().includes(term));
+}
+
+function SearchBox({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="relative block min-w-[220px] flex-1 sm:max-w-[360px]">
+      <IconSearch
+        size={15}
+        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-faint"
+      />
+      <input
+        className="input py-1.5 pr-3 pl-9 text-[0.84rem]"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        type="search"
+      />
+    </label>
+  );
+}
+
+function SelectFilter<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-[0.8rem] text-ink-muted">
+      <span className="font-mono text-[0.68rem] uppercase text-ink-faint">{label}</span>
+      <select
+        className="input w-auto py-1.5 pr-8 text-[0.84rem]"
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function CertificateDetailPanel({ id }: { id: string }) {
@@ -250,11 +312,17 @@ function CertificateDetailPanel({ id }: { id: string }) {
   );
 }
 
-function CertificatesCard() {
+type CertificateStatusFilter = "all" | Certificate["status"] | "expiring";
+type CertificateSort = "newest" | "expires";
+
+export function CertificatesCard() {
   const { notifyError, push } = useToast();
   const queryClient = useQueryClient();
   const { activities } = useLive();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<CertificateStatusFilter>("all");
+  const [sort, setSort] = useState<CertificateSort>("newest");
 
   const certsQuery = useQuery({ queryKey: ["certificates"], queryFn: api.listCertificates });
 
@@ -301,15 +369,36 @@ function CertificatesCard() {
     revokeMutation.mutate(cert.id);
   };
 
-  const certificates = certsQuery.data;
+  const certificates = useMemo(() => {
+    const rows = certsQuery.data ?? [];
+    return rows
+      .filter((cert) => {
+        const expiry = expiryStatus(cert.notAfter);
+        const statusMatches =
+          status === "all" ||
+          cert.status === status ||
+          (status === "expiring" && cert.status === "valid" && expiry.tone !== "ok");
+        return (
+          statusMatches &&
+          matchesSearch([cert.id, cert.orderId, cert.serial, ...cert.identifiers], search)
+        );
+      })
+      .sort((a, b) => {
+        if (sort === "expires") {
+          return new Date(a.notAfter).getTime() - new Date(b.notAfter).getTime();
+        }
+        return new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime();
+      });
+  }, [certsQuery.data, search, sort, status]);
+  const totalCertificates = certsQuery.data?.length ?? 0;
 
   return (
     <section className="card">
       <div className="card-head">
         <h2>Certificates</h2>
-        <span className="card-hint">issued by this server — click a row for details</span>
+        <span className="card-hint">issued by this server — search, sort, or click a row for details</span>
       </div>
-      {certificates === undefined ? (
+      {certsQuery.data === undefined ? (
         certsQuery.isError ? (
           <p className="py-2 text-[0.86rem] text-err">Could not load certificates.</p>
         ) : (
@@ -318,13 +407,47 @@ function CertificatesCard() {
             <div className="skeleton" />
           </div>
         )
-      ) : certificates.length === 0 ? (
+      ) : totalCertificates === 0 ? (
         <p className="py-2 text-[0.86rem] text-ink-faint">
           No certificates issued yet — they'll show up here as ACME clients finalize orders.
         </p>
       ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Search domain, serial, or order"
+            />
+            <SelectFilter
+              label="Status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: "All" },
+                { value: "valid", label: "Valid" },
+                { value: "revoked", label: "Revoked" },
+                { value: "expiring", label: "Expiring soon" },
+              ]}
+            />
+            <SelectFilter
+              label="Sort"
+              value={sort}
+              onChange={setSort}
+              options={[
+                { value: "newest", label: "Newest" },
+                { value: "expires", label: "Expires first" },
+              ]}
+            />
+            <span className="ml-auto font-mono text-[0.72rem] text-ink-faint">
+              {certificates.length} / {totalCertificates}
+            </span>
+          </div>
+          {certificates.length === 0 ? (
+            <p className="py-2 text-[0.86rem] text-ink-faint">No certificates match these filters.</p>
+          ) : (
         <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr>
                 <th className={TH} />
@@ -332,6 +455,7 @@ function CertificatesCard() {
                 <th className={TH}>Status</th>
                 <th className={TH}>Serial</th>
                 <th className={TH}>Issued</th>
+                <th className={TH}>Expires</th>
                 <th className={`${TH} text-right`}>Actions</th>
               </tr>
             </thead>
@@ -369,6 +493,11 @@ function CertificatesCard() {
                       <td className={`${TD} text-[0.82rem] text-ink-muted`}>
                         {new Date(cert.issuedAt).toLocaleString()}
                       </td>
+                      <td className={TD}>
+                        <Badge tone={expiryStatus(cert.notAfter).tone}>
+                          {expiryStatus(cert.notAfter).label}
+                        </Badge>
+                      </td>
                       <td className={`${TD} text-right`}>
                         {cert.status === "valid" ? (
                           <button
@@ -390,7 +519,7 @@ function CertificatesCard() {
                     {expanded ? (
                       <tr className="border-b border-line bg-surface-2/40 last:border-b-0">
                         <td className={TD} />
-                        <td className={TD} colSpan={5}>
+                        <td className={TD} colSpan={6}>
                           <CertificateDetailPanel id={cert.id} />
                         </td>
                       </tr>
@@ -400,6 +529,8 @@ function CertificatesCard() {
               })}
             </tbody>
           </table>
+        </div>
+          )}
         </div>
       )}
     </section>
@@ -480,11 +611,15 @@ function OrderDetailPanel({ order }: { order: Order }) {
   );
 }
 
-function OrdersCard() {
+type OrderStatusFilter = "all" | OrderStatus;
+
+export function OrdersCard() {
   const { notifyError } = useToast();
   const queryClient = useQueryClient();
   const { activities } = useLive();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<OrderStatusFilter>("all");
 
   const ordersQuery = useQuery({ queryKey: ["orders"], queryFn: api.listOrders });
 
@@ -507,15 +642,26 @@ function OrdersCard() {
     }
   }, [latestActivity, queryClient]);
 
-  const orders = ordersQuery.data;
+  const orders = useMemo(() => {
+    const rows = ordersQuery.data ?? [];
+    return rows.filter(
+      (order) =>
+        (status === "all" || order.status === status) &&
+        matchesSearch(
+          [order.id, order.accountId, order.certificateId ?? "", ...order.identifiers],
+          search,
+        ),
+    );
+  }, [ordersQuery.data, search, status]);
+  const totalOrders = ordersQuery.data?.length ?? 0;
 
   return (
     <section className="card">
       <div className="card-head">
         <h2>Orders</h2>
-        <span className="card-hint">every order this server has seen — click a row for details</span>
+        <span className="card-hint">every order this server has seen — click a row for challenge details</span>
       </div>
-      {orders === undefined ? (
+      {ordersQuery.data === undefined ? (
         ordersQuery.isError ? (
           <p className="py-2 text-[0.86rem] text-err">Could not load orders.</p>
         ) : (
@@ -524,11 +670,38 @@ function OrdersCard() {
             <div className="skeleton" />
           </div>
         )
-      ) : orders.length === 0 ? (
+      ) : totalOrders === 0 ? (
         <p className="py-2 text-[0.86rem] text-ink-faint">
           No orders yet — they'll show up here as soon as an ACME client requests one.
         </p>
       ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Search domain, order, or account"
+            />
+            <SelectFilter
+              label="Status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: "All" },
+                { value: "pending", label: "Pending" },
+                { value: "ready", label: "Ready" },
+                { value: "processing", label: "Processing" },
+                { value: "valid", label: "Valid" },
+                { value: "invalid", label: "Invalid" },
+              ]}
+            />
+            <span className="ml-auto font-mono text-[0.72rem] text-ink-faint">
+              {orders.length} / {totalOrders}
+            </span>
+          </div>
+          {orders.length === 0 ? (
+            <p className="py-2 text-[0.86rem] text-ink-faint">No orders match these filters.</p>
+          ) : (
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
@@ -593,20 +766,34 @@ function OrdersCard() {
             </tbody>
           </table>
         </div>
+          )}
+        </div>
       )}
     </section>
   );
 }
 
-function AccountsCard() {
+type AccountStatusFilter = "all" | "valid" | "deactivated";
+
+export function AccountsCard() {
   const { notifyError } = useToast();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<AccountStatusFilter>("all");
   const accountsQuery = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
 
   useEffect(() => {
     if (accountsQuery.isError) notifyError(accountsQuery.error);
   }, [accountsQuery.isError, accountsQuery.error, notifyError]);
 
-  const accounts = accountsQuery.data;
+  const accounts = useMemo(() => {
+    const rows = accountsQuery.data ?? [];
+    return rows.filter(
+      (account) =>
+        (status === "all" || account.status === status) &&
+        matchesSearch([account.id, account.jwkThumbprint, ...account.contact], search),
+    );
+  }, [accountsQuery.data, search, status]);
+  const totalAccounts = accountsQuery.data?.length ?? 0;
 
   return (
     <section className="card">
@@ -614,7 +801,7 @@ function AccountsCard() {
         <h2>Accounts</h2>
         <span className="card-hint">ACME accounts registered with this server</span>
       </div>
-      {accounts === undefined ? (
+      {accountsQuery.data === undefined ? (
         accountsQuery.isError ? (
           <p className="py-2 text-[0.86rem] text-err">Could not load accounts.</p>
         ) : (
@@ -623,11 +810,35 @@ function AccountsCard() {
             <div className="skeleton" />
           </div>
         )
-      ) : accounts.length === 0 ? (
+      ) : totalAccounts === 0 ? (
         <p className="py-2 text-[0.86rem] text-ink-faint">
           No accounts yet — they'll show up here as soon as an ACME client registers.
         </p>
       ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder="Search account, thumbprint, or contact"
+            />
+            <SelectFilter
+              label="Status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "all", label: "All" },
+                { value: "valid", label: "Valid" },
+                { value: "deactivated", label: "Deactivated" },
+              ]}
+            />
+            <span className="ml-auto font-mono text-[0.72rem] text-ink-faint">
+              {accounts.length} / {totalAccounts}
+            </span>
+          </div>
+          {accounts.length === 0 ? (
+            <p className="py-2 text-[0.86rem] text-ink-faint">No accounts match these filters.</p>
+          ) : (
         <div className="overflow-x-auto rounded-lg border border-line">
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
@@ -664,53 +875,17 @@ function AccountsCard() {
             </tbody>
           </table>
         </div>
+          )}
+        </div>
       )}
     </section>
   );
 }
 
-type TabId = "certificates" | "orders" | "accounts";
-
-const TABS: { id: TabId; label: string }[] = [
-  { id: "certificates", label: "Certificates" },
-  { id: "orders", label: "Orders" },
-  { id: "accounts", label: "Accounts" },
-];
-
-function TabBar({ active, onChange }: { active: TabId; onChange: (id: TabId) => void }) {
-  return (
-    <div role="tablist" className="flex gap-1 border-b border-line">
-      {TABS.map((tab) => (
-        <button
-          key={tab.id}
-          role="tab"
-          type="button"
-          aria-selected={active === tab.id}
-          onClick={() => onChange(tab.id)}
-          className={[
-            "-mb-px cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            active === tab.id
-              ? "border-accent text-accent"
-              : "border-transparent text-ink-muted hover:text-ink",
-          ].join(" ")}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function CertificatesPage() {
-  const [tab, setTab] = useState<TabId>("certificates");
-
   return (
     <div className="flex flex-col gap-4">
-      <CaRootCard />
-      <TabBar active={tab} onChange={setTab} />
-      {tab === "certificates" ? <CertificatesCard /> : null}
-      {tab === "orders" ? <OrdersCard /> : null}
-      {tab === "accounts" ? <AccountsCard /> : null}
+      <CertificatesCard />
     </div>
   );
 }

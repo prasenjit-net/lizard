@@ -38,6 +38,14 @@ export interface Task {
   createdAt: string;
 }
 
+export interface ActivityLogEntry {
+  id: number;
+  kind: string;
+  summary: string;
+  createdAt: string;
+  timestampMs: number;
+}
+
 export interface CaInfo {
   rootCertPem: string;
 }
@@ -49,6 +57,7 @@ export interface Certificate {
   serial: string;
   status: "valid" | "revoked";
   issuedAt: string;
+  notAfter: string;
   revokedAt: string | null;
   revocationReason: number | null;
 }
@@ -156,6 +165,7 @@ export const api = {
   config: () => request<ServerConfig>("/api/config"),
   health: () => request<{ status: string; version: string }>("/api/health"),
   metrics: () => request<Metrics>("/api/metrics"),
+  listActivity: () => request<ActivityLogEntry[]>("/api/activity"),
   listTasks: () => request<Task[]>("/api/tasks"),
   createTask: (title: string) =>
     request<Task>("/api/tasks", { method: "POST", body: JSON.stringify({ title }) }),

@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS challenges (
     error_json       TEXT
 );
 
+CREATE TABLE IF NOT EXISTS activity_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind         TEXT NOT NULL,
+    summary      TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    timestamp_ms INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS orders_account_id ON orders(account_id);
 CREATE INDEX IF NOT EXISTS authorizations_order_id ON authorizations(order_id);
 CREATE INDEX IF NOT EXISTS challenges_authorization_id ON challenges(authorization_id);
+CREATE INDEX IF NOT EXISTS activity_log_timestamp_ms ON activity_log(timestamp_ms DESC);

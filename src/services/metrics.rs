@@ -1,17 +1,13 @@
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use rand::Rng;
 use serde::Serialize;
+use sysinfo::System;
 
 use crate::services::events::Event;
 use crate::state::SharedState;
 
 /// A point-in-time snapshot of server metrics.
-///
-/// CPU and memory are a random walk so the dashboard has live data out
-/// of the box; the request/connection counters are real. Swap the walk
-/// for actual sampling (e.g. the `sysinfo` crate) when you need truth.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MetricsSnapshot {
@@ -31,19 +27,23 @@ const TICK: Duration = Duration::from_secs(2);
 pub fn spawn(state: SharedState) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(TICK);
-        let mut cpu = 34.0_f64;
-        let mut memory = 52.0_f64;
         let mut last_total = 0_u64;
+        let mut system = System::new();
+        system.refresh_cpu_all();
+        system.refresh_memory();
 
         loop {
             interval.tick().await;
 
-            let (cpu_step, mem_step) = {
-                let mut rng = rand::thread_rng();
-                (rng.gen_range(-4.5..4.5), rng.gen_range(-2.0..2.0))
+            system.refresh_cpu_all();
+            system.refresh_memory();
+            let cpu = f64::from(system.global_cpu_usage()).clamp(0.0, 100.0);
+            let total_memory = system.total_memory();
+            let memory = if total_memory == 0 {
+                0.0
+            } else {
+                (system.used_memory() as f64 / total_memory as f64 * 100.0).clamp(0.0, 100.0)
             };
-            cpu = (cpu + cpu_step).clamp(3.0, 96.0);
-            memory = (memory + mem_step).clamp(18.0, 90.0);
 
             let requests_total = state.requests_total.load(Ordering::Relaxed);
             let requests_per_min =

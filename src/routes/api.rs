@@ -40,6 +40,38 @@ pub async fn metrics(State(state): State<SharedState>) -> AppResult<Json<Metrics
         .ok_or_else(|| AppError::Internal("metrics are not available yet".into()))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityLogEntry {
+    id: i64,
+    kind: String,
+    summary: String,
+    created_at: String,
+    timestamp_ms: i64,
+}
+
+pub async fn list_activity(
+    State(state): State<SharedState>,
+) -> AppResult<Json<Vec<ActivityLogEntry>>> {
+    let conn = state.db.conn();
+    let mut stmt = conn.prepare(
+        "SELECT id, kind, summary, created_at, timestamp_ms \
+         FROM activity_log ORDER BY timestamp_ms DESC, id DESC LIMIT 250",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ActivityLogEntry {
+                id: row.get(0)?,
+                kind: row.get(1)?,
+                summary: row.get(2)?,
+                created_at: row.get(3)?,
+                timestamp_ms: row.get(4)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Json(rows))
+}
+
 pub async fn list_tasks(State(state): State<SharedState>) -> Json<Vec<Task>> {
     Json(state.tasks.list().await)
 }
@@ -100,6 +132,7 @@ pub struct CertificateSummary {
     serial: String,
     status: &'static str,
     issued_at: String,
+    not_after: String,
     revoked_at: Option<String>,
     revocation_reason: Option<i64>,
 }
@@ -113,8 +146,8 @@ pub async fn list_certificates(
     let conn = state.db.conn();
     let mut stmt = conn.prepare(
         "SELECT certificates.id, certificates.order_id, orders.identifiers_json, \
-                certificates.serial, certificates.issued_at, certificates.revoked_at, \
-                certificates.revocation_reason \
+                certificates.serial, certificates.issued_at, certificates.not_after, \
+                certificates.revoked_at, certificates.revocation_reason \
          FROM certificates JOIN orders ON orders.id = certificates.order_id \
          ORDER BY certificates.issued_at DESC",
     )?;
@@ -126,8 +159,9 @@ pub async fn list_certificates(
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<i64>>(6)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, Option<String>>(6)?,
+                row.get::<_, Option<i64>>(7)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -135,7 +169,16 @@ pub async fn list_certificates(
     let certificates = rows
         .into_iter()
         .map(
-            |(id, order_id, identifiers_json, serial, issued_at, revoked_at, revocation_reason)| {
+            |(
+                id,
+                order_id,
+                identifiers_json,
+                serial,
+                issued_at,
+                not_after,
+                revoked_at,
+                revocation_reason,
+            )| {
                 let identifiers: Vec<Identifier> =
                     serde_json::from_str(&identifiers_json).unwrap_or_default();
                 CertificateSummary {
@@ -149,6 +192,7 @@ pub async fn list_certificates(
                         "valid"
                     },
                     issued_at,
+                    not_after,
                     revoked_at,
                     revocation_reason,
                 }
@@ -268,6 +312,7 @@ pub async fn revoke_certificate(
         "UPDATE certificates SET revoked_at = ?1 WHERE id = ?2",
         params![now, id],
     )?;
+    drop(conn);
 
     state.activity("certificate", format!("certificate {id} revoked via admin"));
     Ok(StatusCode::NO_CONTENT)

@@ -2,17 +2,27 @@ import { Link, useLocation } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 import { useConfig } from "../context/ConfigContext";
 import {
+  IconActivity,
   IconDashboard,
   IconExternal,
-  IconLayers,
+  IconFileText,
+  IconKey,
   IconShield,
   IconSliders,
+  IconUsers,
   IconX,
 } from "../icons";
 import Logo from "./Logo";
 
 interface NavItem {
-  to: "/" | "/certificates" | "/components" | "/settings";
+  to:
+    | "/"
+    | "/certificates"
+    | "/orders"
+    | "/accounts"
+    | "/activity"
+    | "/certificate-authority"
+    | "/settings";
   label: string;
   icon: ReactElement;
 }
@@ -20,7 +30,10 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: <IconDashboard size={20} /> },
   { to: "/certificates", label: "Certificates", icon: <IconShield size={20} /> },
-  { to: "/components", label: "Components", icon: <IconLayers size={20} /> },
+  { to: "/orders", label: "Orders", icon: <IconFileText size={20} /> },
+  { to: "/accounts", label: "Accounts", icon: <IconUsers size={20} /> },
+  { to: "/activity", label: "Activity Log", icon: <IconActivity size={20} /> },
+  { to: "/certificate-authority", label: "Certificate Authority", icon: <IconKey size={20} /> },
   { to: "/settings", label: "Settings", icon: <IconSliders size={20} /> },
 ];
 

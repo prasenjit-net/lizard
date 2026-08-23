@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::Arc;
 use std::time::Instant;
 
+use rusqlite::params;
 use tokio::sync::{broadcast, RwLock};
 
 use crate::access_log::AccessLog;
@@ -81,10 +82,23 @@ impl AppState {
 
     /// Push a human-readable entry to every client's activity feed.
     pub fn activity(&self, kind: &str, message: impl Into<String>) {
+        let now = chrono::Utc::now();
+        let timestamp_ms = now.timestamp_millis();
+        let message = message.into();
+        let created_at = now.to_rfc3339();
+        if let Err(err) = self.db.conn().execute(
+            "INSERT INTO activity_log (kind, summary, created_at, timestamp_ms) \
+             VALUES (?1, ?2, ?3, ?4)",
+            params![kind, &message, &created_at, timestamp_ms],
+        ) {
+            tracing::error!("failed to write activity log entry: {err:?}");
+            #[cfg(test)]
+            panic!("failed to write activity log entry: {err:?}");
+        }
         self.broadcast(Event::Activity {
             kind: kind.to_string(),
-            message: message.into(),
-            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+            message,
+            timestamp_ms,
         });
     }
 }

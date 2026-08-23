@@ -192,6 +192,28 @@ export const IconShield = icon(
   </>,
 );
 
+export const IconKey = icon(
+  <>
+    <circle cx="7.5" cy="14.5" r="3.5" />
+    <path d="M10 12 20 2m-4 4 3 3m-6 0 3 3" />
+  </>,
+);
+
+export const IconFileText = icon(
+  <>
+    <path d="M6 3h8l4 4v14H6z" />
+    <path d="M14 3v5h5" />
+    <path d="M9 13h6M9 17h6" />
+  </>,
+);
+
+export const IconSearch = icon(
+  <>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="m15.5 15.5 5 5" />
+  </>,
+);
+
 export const IconDownload = icon(
   <>
     <path d="M12 3v12m0 0-4-4m4 4 4-4" />

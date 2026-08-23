@@ -202,6 +202,19 @@ pub async fn new_order(
         tx.commit()?;
     }
 
+    state.activity(
+        "order",
+        format!(
+            "created order {order_id} for {}",
+            payload
+                .identifiers
+                .iter()
+                .map(|i| i.value.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    );
+
     let order = find_order(&state.db, &order_id)?
         .ok_or_else(|| AcmeError::server_internal("order vanished immediately after insert"))?;
     Ok(order_response(&state, &order, StatusCode::CREATED))

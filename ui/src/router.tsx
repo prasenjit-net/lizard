@@ -4,10 +4,14 @@
 // component, so the sidebar/topbar shell wraps every page via <Outlet/>.
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import Layout from "./components/Layout";
+import AccountsPage from "./pages/Accounts";
+import ActivityLogPage from "./pages/ActivityLog";
+import CertificateAuthorityPage from "./pages/CertificateAuthority";
 import CertificatesPage from "./pages/Certificates";
 import ComponentsPage from "./pages/Components";
 import DashboardPage from "./pages/Dashboard";
 import NotFoundPage from "./pages/NotFound";
+import OrdersPage from "./pages/Orders";
 import SettingsPage from "./pages/Settings";
 
 const rootRoute = createRootRoute({
@@ -26,6 +30,30 @@ const certificatesRoute = createRoute({
   component: CertificatesPage,
 });
 
+const ordersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/orders",
+  component: OrdersPage,
+});
+
+const accountsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/accounts",
+  component: AccountsPage,
+});
+
+const activityLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/activity",
+  component: ActivityLogPage,
+});
+
+const certificateAuthorityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/certificate-authority",
+  component: CertificateAuthorityPage,
+});
+
 const componentsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/components",
@@ -41,6 +69,10 @@ const settingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   certificatesRoute,
+  ordersRoute,
+  accountsRoute,
+  activityLogRoute,
+  certificateAuthorityRoute,
   componentsRoute,
   settingsRoute,
 ]);

@@ -191,6 +191,7 @@ pub async fn new_account(
         status: "valid".to_string(),
         contact: payload.contact,
     };
+    state.activity("account", format!("created ACME account {}", account.id));
     Ok(account_response(&state, &account, StatusCode::CREATED))
 }
 
@@ -220,6 +221,7 @@ pub async fn update_account(
             .map_err(|_| AcmeError::malformed("invalid request body"))?
     };
 
+    let mut changes = Vec::new();
     if let Some(status) = &update.status {
         if status != "deactivated" {
             return Err(AcmeError::malformed(
@@ -231,6 +233,7 @@ pub async fn update_account(
             [&account.id],
         )?;
         account.status = "deactivated".to_string();
+        changes.push("deactivated".to_string());
     }
 
     if let Some(contact) = update.contact {
@@ -238,9 +241,17 @@ pub async fn update_account(
             .map_err(|_| AcmeError::server_internal("failed to serialize contact"))?;
         state.db.conn().execute(
             "UPDATE accounts SET contact_json = ?1 WHERE id = ?2",
-            params![contact_json, account.id],
+            params![contact_json, &account.id],
         )?;
         account.contact = Some(contact);
+        changes.push("updated contact".to_string());
+    }
+
+    if !changes.is_empty() {
+        state.activity(
+            "account",
+            format!("{} account {}", changes.join(" and "), account.id),
+        );
     }
 
     Ok(account_response(&state, &account, StatusCode::OK))

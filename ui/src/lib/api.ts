@@ -9,8 +9,14 @@ export interface UiConfig {
   repoUrl?: string | null;
 }
 
+export interface CaConfig {
+  certValidityDays: number;
+  rootValidityYears: number;
+}
+
 export interface ServerConfig {
   ui: UiConfig;
+  ca: CaConfig;
   version: string;
   startedAtMs: number;
 }
@@ -44,6 +50,56 @@ export interface Certificate {
   status: "valid" | "revoked";
   issuedAt: string;
   revokedAt: string | null;
+  revocationReason: number | null;
+}
+
+export interface CertificateDetail extends Certificate {
+  accountId: string;
+  notBefore: string;
+  notAfter: string;
+  pemChain: string;
+}
+
+export type OrderStatus = "pending" | "ready" | "processing" | "valid" | "invalid";
+
+export interface Order {
+  id: string;
+  accountId: string;
+  status: OrderStatus;
+  identifiers: string[];
+  expires: string;
+  createdAt: string;
+  certificateId: string | null;
+}
+
+export interface ChallengeInfo {
+  id: string;
+  type: string;
+  status: "pending" | "processing" | "valid" | "invalid";
+  validatedAt: string | null;
+  error: { type: string; detail: string } | null;
+}
+
+export interface AuthorizationInfo {
+  id: string;
+  identifier: string;
+  status: "pending" | "valid" | "invalid" | "expired";
+  expires: string;
+  challenges: ChallengeInfo[];
+}
+
+export interface OrderDetail extends Order {
+  error: { type: string; detail: string } | null;
+  authorizations: AuthorizationInfo[];
+}
+
+export interface Account {
+  id: string;
+  jwkThumbprint: string;
+  status: string;
+  contact: string[];
+  tosAgreed: boolean;
+  createdAt: string;
 }
 
 export class ApiError extends Error {
@@ -111,6 +167,10 @@ export const api = {
   missing: () => request<never>("/api/this-endpoint-does-not-exist"),
   caInfo: () => request<CaInfo>("/api/ca"),
   listCertificates: () => request<Certificate[]>("/api/certificates"),
+  getCertificate: (id: string) => request<CertificateDetail>(`/api/certificates/${id}`),
   revokeCertificate: (id: string) =>
     request<void>(`/api/certificates/${id}/revoke`, { method: "POST" }),
+  listOrders: () => request<Order[]>("/api/orders"),
+  getOrder: (id: string) => request<OrderDetail>(`/api/orders/${id}`),
+  listAccounts: () => request<Account[]>("/api/accounts"),
 };

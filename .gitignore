@@ -2,4 +2,5 @@
 ui/node_modules
 ui/dist
 access.log
+/data
 .DS_Store

@@ -27,6 +27,9 @@ pub enum AppError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("ca error: {0}")]
+    Ca(#[from] rcgen::Error),
+
     #[error("{0}")]
     Internal(String),
 }
@@ -36,7 +39,7 @@ impl AppError {
         match self {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
-            AppError::Config(_) | AppError::Io(_) | AppError::Internal(_) => {
+            AppError::Config(_) | AppError::Io(_) | AppError::Ca(_) | AppError::Internal(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         }
@@ -48,6 +51,7 @@ impl AppError {
             AppError::BadRequest(_) => "BAD_REQUEST",
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::Io(_) => "IO_ERROR",
+            AppError::Ca(_) => "CA_ERROR",
             AppError::Internal(_) => "INTERNAL",
         }
     }
@@ -62,15 +66,18 @@ impl IntoResponse for AppError {
             tracing::debug!(code = self.code(), "request rejected: {self}");
         }
         // Client-facing messages: BadRequest/NotFound/Internal are safe —
-        // their text is always authored by our own handlers. Config and Io
-        // wrap a library error via `#[from]`/format!, which can include
-        // local file paths or OS error text, so those get a generic
-        // message instead; the real detail already went to tracing above.
+        // their text is always authored by our own handlers. Config, Io,
+        // and Ca wrap a library error via `#[from]`/format!, which can
+        // include local file paths or OS error text, so those get a
+        // generic message instead; the real detail already went to
+        // tracing above.
         let message = match &self {
             AppError::BadRequest(_) | AppError::NotFound(_) | AppError::Internal(_) => {
                 self.to_string()
             }
-            AppError::Config(_) | AppError::Io(_) => "an internal error occurred".to_string(),
+            AppError::Config(_) | AppError::Io(_) | AppError::Ca(_) => {
+                "an internal error occurred".to_string()
+            }
         };
         let body = json!({
             "error": {
@@ -143,5 +150,13 @@ mod tests {
         let message = body["error"]["message"].as_str().unwrap();
         assert_eq!(message, "an internal error occurred");
         assert!(!message.contains("alice"));
+    }
+
+    #[tokio::test]
+    async fn ca_errors_are_masked() {
+        let body = body_json(AppError::from(rcgen::Error::CouldNotParseCertificate)).await;
+        assert_eq!(body["error"]["code"], "CA_ERROR");
+        assert_eq!(body["error"]["status"], 500);
+        assert_eq!(body["error"]["message"], "an internal error occurred");
     }
 }

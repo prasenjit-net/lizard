@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub server: ServerConfig,
     pub logging: LoggingConfig,
     pub ui: UiConfig,
+    pub ca: CaConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -62,6 +63,31 @@ impl Default for UiConfig {
             tagline: "Single-binary fullstack starter".into(),
             default_theme: "auto".into(),
             repo_url: None,
+        }
+    }
+}
+
+/// The CA's own root keypair/certificate and the leaf certificates it
+/// issues. `root_cert_path`/`root_key_path` are generated on first run if
+/// absent (see `crate::ca::Ca::load_or_generate`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CaConfig {
+    pub root_cert_path: PathBuf,
+    pub root_key_path: PathBuf,
+    pub root_validity_years: i64,
+    pub cert_validity_days: i64,
+    pub db_path: PathBuf,
+}
+
+impl Default for CaConfig {
+    fn default() -> Self {
+        Self {
+            root_cert_path: PathBuf::from("data/ca/root-cert.pem"),
+            root_key_path: PathBuf::from("data/ca/root-key.pem"),
+            root_validity_years: 10,
+            cert_validity_days: 90,
+            db_path: PathBuf::from("data/lizard.db"),
         }
     }
 }
@@ -129,6 +155,29 @@ mod tests {
         assert_eq!(config.server.host, "127.0.0.1"); // untouched field defaults
         assert_eq!(config.logging.level, "info");
         assert_eq!(config.ui.app_name, "Lizard");
+        assert_eq!(
+            config.ca.root_cert_path,
+            PathBuf::from("data/ca/root-cert.pem")
+        );
+        assert_eq!(config.ca.cert_validity_days, 90);
+    }
+
+    #[test]
+    fn ca_section_overrides_defaults() {
+        let toml = r#"
+            [ca]
+            root_cert_path = "ca/root.pem"
+            root_key_path = "ca/root.key"
+            root_validity_years = 5
+            cert_validity_days = 30
+            db_path = "state.db"
+        "#;
+        let config: AppConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.ca.root_cert_path, PathBuf::from("ca/root.pem"));
+        assert_eq!(config.ca.root_key_path, PathBuf::from("ca/root.key"));
+        assert_eq!(config.ca.root_validity_years, 5);
+        assert_eq!(config.ca.cert_validity_days, 30);
+        assert_eq!(config.ca.db_path, PathBuf::from("state.db"));
     }
 
     #[test]

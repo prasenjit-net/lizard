@@ -24,3 +24,13 @@ tagline = "ACME server with a built-in private CA"
 # Theme the UI uses until the visitor picks one: light | dark | auto
 default_theme = "auto"
 repo_url = "https://github.com/prasenjit-net/lizard"
+
+[ca]
+# Generated on first run if these don't exist yet — see the README for
+# what to do with the root cert once it's there.
+root_cert_path = "data/ca/root-cert.pem"
+root_key_path = "data/ca/root-key.pem"
+root_validity_years = 10
+# How long each certificate this server issues stays valid for.
+cert_validity_days = 90
+db_path = "data/lizard.db"

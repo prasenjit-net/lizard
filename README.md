@@ -106,8 +106,18 @@ lizard [OPTIONS]
 | `ui.tagline` | … | Shown under the app name |
 | `ui.default_theme` | `auto` | `light` \| `dark` \| `auto` — used until the visitor picks |
 | `ui.repo_url` | *(unset)* | Sidebar "Repository" link |
+| `ca.root_cert_path` | `data/ca/root-cert.pem` | CA root certificate; generated on first run if absent |
+| `ca.root_key_path` | `data/ca/root-key.pem` | CA root private key; generated on first run if absent |
+| `ca.root_validity_years` | `10` | Validity period for a freshly generated root |
+| `ca.cert_validity_days` | `90` | Validity period for each certificate this server issues |
+| `ca.db_path` | `data/lizard.db` | SQLite database for accounts/orders/certificates |
 
 If the config file is missing, built-in defaults are used (with a warning).
+
+On first run, the server generates an ECDSA P-256 root CA under `data/ca/`
+(directly off the root — no intermediate yet) and logs a warning with its
+path. Install that root certificate in the trust store of anything that
+should accept certificates this server issues.
 
 ## API
 

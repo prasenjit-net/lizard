@@ -1,4 +1,5 @@
 mod access_log;
+mod ca;
 mod config;
 mod error;
 mod routes;
@@ -95,7 +96,7 @@ async fn main() -> ExitCode {
 
 async fn run(config: AppConfig) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("{}:{}", config.server.host, config.server.port);
-    let state = Arc::new(AppState::new(config).await);
+    let state = Arc::new(AppState::new(config).await?);
     services::metrics::spawn(state.clone());
 
     let app = routes::router(state);

@@ -17,8 +17,22 @@ use crate::config::AppConfig;
 use crate::state::AppState;
 
 async fn test_app() -> Router {
-    // AppConfig::default() has no access_log path, so tests never touch disk.
-    let state = Arc::new(AppState::new(AppConfig::default()).await);
+    // AppConfig::default() has no access_log path, so the access log never
+    // touches disk. The CA still needs to read/write a root cert + key on
+    // first run, so that goes to a scratch tempdir instead of the repo's
+    // real `data/ca/` — otherwise every test run would generate (and race
+    // on) files in the working directory.
+    let dir = tempfile::TempDir::new().unwrap();
+    let config = AppConfig {
+        ca: crate::config::CaConfig {
+            root_cert_path: dir.path().join("root-cert.pem"),
+            root_key_path: dir.path().join("root-key.pem"),
+            db_path: dir.path().join("lizard.db"),
+            ..AppConfig::default().ca
+        },
+        ..AppConfig::default()
+    };
+    let state = Arc::new(AppState::new(config).await.unwrap());
     crate::routes::router(state)
 }
 

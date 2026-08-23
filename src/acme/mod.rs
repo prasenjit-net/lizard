@@ -1,5 +1,6 @@
 pub mod account;
 pub mod authz;
+pub mod cert;
 pub mod challenge;
 pub mod directory;
 pub mod error;
@@ -32,8 +33,10 @@ pub fn router(state: SharedState) -> Router<SharedState> {
         .route("/account/{id}", post(account::update_account))
         .route("/new-order", post(order::new_order))
         .route("/order/{id}", post(order::get_order))
+        .route("/order/{id}/finalize", post(order::finalize_order))
         .route("/authz/{id}", post(authz::get_authz))
         .route("/challenge/{id}", post(challenge::respond_challenge))
+        .route("/cert/{id}", post(cert::download_certificate))
         // Without its own fallback, an unmatched /acme/* path falls
         // through to the outer router's fallback — the SPA/static-asset
         // handler — and an ACME client gets an HTML page (or a 503 "UI

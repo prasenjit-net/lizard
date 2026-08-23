@@ -67,10 +67,17 @@ impl AcmeError {
         Self::new(StatusCode::BAD_REQUEST, "rejectedIdentifier", detail)
     }
 
-    // order_not_ready / bad_csr land with the finalize handler in a later
-    // milestone — added here early they'd just be unused `pub fn`s (this
-    // is a binary crate, so `dead_code` fires on those same as anything
-    // private).
+    pub fn order_not_ready() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "orderNotReady",
+            "the order is not ready to be finalized",
+        )
+    }
+
+    pub fn bad_csr(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, "badCSR", detail)
+    }
 
     pub fn server_internal(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, "serverInternal", detail)

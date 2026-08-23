@@ -1,11 +1,4 @@
 //! The CA's root keypair/certificate and leaf-signing primitive.
-//!
-//! Nothing calls `sign_csr`/`root_cert_pem` yet — the ACME account/order/
-//! finalize handlers and the admin "view root cert" endpoint land in
-//! later milestones and are what actually exercise them. `AppState`
-//! already holds a `Ca` so its bootstrap (generate-or-load, fallible) is
-//! proven out end to end now rather than deferred.
-#![allow(dead_code)]
 
 use std::fs;
 
@@ -19,9 +12,21 @@ use time::{Duration, OffsetDateTime};
 use crate::config::CaConfig;
 use crate::error::AppResult;
 
+/// A freshly issued leaf certificate and the serial number rcgen assigned
+/// it, so callers can record the *actual* embedded serial rather than
+/// inventing their own identifier for the same certificate.
+pub struct IssuedCertificate {
+    pub pem: String,
+    pub serial: String,
+}
+
 /// Owns the CA's root keypair + certificate and signs leaf certificates
 /// from client-submitted CSRs.
 pub struct Ca {
+    // Not read anywhere yet — the admin "view/download root cert" endpoint
+    // is a later milestone. `root_cert_pem()` below is exercised directly
+    // by this module's own tests in the meantime.
+    #[allow(dead_code)]
     root_cert_pem: String,
     issuer: Issuer<'static, KeyPair>,
 }
@@ -58,6 +63,7 @@ impl Ca {
 
     /// The root CA certificate in PEM format, for installing into trust
     /// stores or serving to operators.
+    #[allow(dead_code)]
     pub fn root_cert_pem(&self) -> &str {
         &self.root_cert_pem
     }
@@ -70,14 +76,15 @@ impl Ca {
     /// let a client mint its own subordinate CA. Every leaf certificate
     /// this issues gets the same fixed, non-CA, TLS-server key usage
     /// regardless of what the CSR asked for.
-    pub fn sign_csr(&self, csr_der: &[u8], validity_days: i64) -> AppResult<String> {
+    pub fn sign_csr(&self, csr_der: &[u8], validity_days: i64) -> AppResult<IssuedCertificate> {
         let der = CertificateSigningRequestDer::from(csr_der);
         let mut csr_params = CertificateSigningRequestParams::from_der(&der)?;
 
         let now = OffsetDateTime::now_utc();
         csr_params.params.not_before = now;
         csr_params.params.not_after = now + Duration::days(validity_days);
-        csr_params.params.serial_number = Some(random_serial());
+        let serial = random_serial();
+        csr_params.params.serial_number = Some(serial.clone());
         csr_params.params.is_ca = IsCa::ExplicitNoCa;
         csr_params.params.key_usages = vec![
             KeyUsagePurpose::DigitalSignature,
@@ -87,7 +94,10 @@ impl Ca {
         csr_params.params.use_authority_key_identifier_extension = true;
 
         let cert = csr_params.signed_by(&self.issuer)?;
-        Ok(cert.pem())
+        Ok(IssuedCertificate {
+            pem: cert.pem(),
+            serial: serial.to_string(),
+        })
     }
 }
 
@@ -195,9 +205,11 @@ mod tests {
         let ca = Ca::load_or_generate(&test_config(&dir)).unwrap();
 
         let csr_der = leaf_csr_der("service.internal.example");
-        let leaf_pem = ca.sign_csr(&csr_der, 90).unwrap();
+        let issued = ca.sign_csr(&csr_der, 90).unwrap();
+        let leaf_pem = issued.pem;
 
         assert!(leaf_pem.contains("BEGIN CERTIFICATE"));
+        assert!(!issued.serial.is_empty());
 
         // Re-parse the root and leaf and confirm the leaf's issuer really
         // is this CA — a wrong-key or wrong-params bug would otherwise
@@ -220,7 +232,7 @@ mod tests {
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         let csr_der = params.serialize_request(&key_pair).unwrap().der().to_vec();
 
-        let leaf_pem = ca.sign_csr(&csr_der, 90).unwrap();
+        let leaf_pem = ca.sign_csr(&csr_der, 90).unwrap().pem;
 
         let leaf_der = pem::parse(&leaf_pem).unwrap().into_contents();
         let (_, leaf) = x509_parser::parse_x509_certificate(&leaf_der).unwrap();

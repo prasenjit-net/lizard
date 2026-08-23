@@ -29,9 +29,6 @@ pub struct AppState {
     /// built once so validations reuse its connection pool rather than
     /// paying a fresh TLS/TCP handshake per check.
     pub http_client: reqwest::Client,
-    // Not read anywhere yet — the ACME handlers that sign certificates
-    // land in a later milestone. See the module doc comment on `crate::ca`.
-    #[allow(dead_code)]
     pub ca: Ca,
     pub db: Db,
     pub latest_metrics: RwLock<Option<MetricsSnapshot>>,

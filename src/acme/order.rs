@@ -3,7 +3,11 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use rcgen::{CertificateSigningRequestParams, SanType};
 use rusqlite::params;
+use rustls_pki_types::CertificateSigningRequestDer;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -221,5 +225,123 @@ pub async fn get_order(
         return Err(AcmeError::not_found("no such order"));
     }
 
+    Ok(order_response(&state, &order, StatusCode::OK))
+}
+
+#[derive(Debug, Deserialize)]
+struct FinalizePayload {
+    /// Base64url-encoded DER CSR, per RFC 8555 §7.4.
+    csr: String,
+}
+
+/// The lowercased DNS names a CSR requests as subject alternative names —
+/// used to check the CSR matches the order's identifiers exactly before
+/// this server signs anything. Returns `AcmeError::bad_csr` for a CSR
+/// `Ca::sign_csr` would also reject; parsed here too (not just left to
+/// `sign_csr`) because that check has to happen *before* deciding whether
+/// to sign at all, not after.
+fn requested_dns_names(csr_der: &[u8]) -> Result<Vec<String>, AcmeError> {
+    let der = CertificateSigningRequestDer::from(csr_der);
+    let csr_params = CertificateSigningRequestParams::from_der(&der)
+        .map_err(|err| AcmeError::bad_csr(format!("could not parse CSR: {err}")))?;
+
+    let mut names: Vec<String> = csr_params
+        .params
+        .subject_alt_names
+        .iter()
+        .filter_map(|san| match san {
+            SanType::DnsName(name) => Some(name.as_str().to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+/// `POST /acme/order/{id}/finalize` (RFC 8555 §7.4). Only reachable once
+/// every authorization on the order is valid (`order.status == "ready"`);
+/// the CSR's subject alternative names must be exactly the order's
+/// identifiers — not a superset, not a subset — matching what Boulder and
+/// other implementations enforce in practice even though RFC 8555's own
+/// wording is looser than that.
+pub async fn finalize_order(
+    State(state): State<SharedState>,
+    Path(id): Path<String>,
+    body: Bytes,
+) -> Result<Response, AcmeError> {
+    let url = urls::order_finalize(&state, &id);
+    let parsed = jws::parse_and_check_nonce(&body, &url, &state.nonces)?;
+    let (account, payload) = account::authenticate(&state, parsed)?;
+
+    let order = find_order(&state.db, &id)?.ok_or_else(|| AcmeError::not_found("no such order"))?;
+    if order.account_id != account.id {
+        return Err(AcmeError::not_found("no such order"));
+    }
+    if order.status != "ready" {
+        return Err(AcmeError::order_not_ready());
+    }
+    if chrono::DateTime::parse_from_rfc3339(&order.expires)
+        .is_ok_and(|expires| expires < chrono::Utc::now())
+    {
+        return Err(AcmeError::malformed("order has expired"));
+    }
+
+    let payload: FinalizePayload = serde_json::from_slice(&payload)
+        .map_err(|_| AcmeError::malformed("invalid request body"))?;
+    let csr_der = URL_SAFE_NO_PAD
+        .decode(&payload.csr)
+        .map_err(|_| AcmeError::malformed("csr is not valid base64url"))?;
+
+    let requested = requested_dns_names(&csr_der)?;
+    let mut expected: Vec<String> = order
+        .identifiers
+        .iter()
+        .map(|identifier| identifier.value.to_lowercase())
+        .collect();
+    expected.sort();
+    expected.dedup();
+    if requested != expected {
+        return Err(AcmeError::bad_csr(
+            "CSR subject alternative names do not exactly match the order's identifiers",
+        ));
+    }
+
+    let issued = state
+        .ca
+        .sign_csr(&csr_der, state.config.ca.cert_validity_days)?;
+
+    let certificate_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    {
+        let mut conn = state.db.conn();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO certificates (id, order_id, serial, pem_chain, issued_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![certificate_id, order.id, issued.serial, issued.pem, now],
+        )?;
+        tx.execute(
+            "UPDATE orders SET status = 'valid', certificate_id = ?1 WHERE id = ?2",
+            params![certificate_id, order.id],
+        )?;
+        tx.commit()?;
+    }
+
+    state.activity(
+        "certificate",
+        format!(
+            "issued a certificate for {}",
+            order
+                .identifiers
+                .iter()
+                .map(|i| i.value.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    );
+
+    let order = find_order(&state.db, &order.id)?
+        .ok_or_else(|| AcmeError::server_internal("order vanished immediately after finalize"))?;
     Ok(order_response(&state, &order, StatusCode::OK))
 }

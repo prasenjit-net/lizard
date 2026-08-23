@@ -154,8 +154,14 @@ jobs:
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
         with:
           key: ${{ matrix.target }}
+          workspaces: |
+            .
+            dev/interop-check
 
       - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build interop-check
+        run: cargo build --release --locked --target ${{ matrix.target }} --manifest-path dev/interop-check/Cargo.toml
 
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
@@ -165,7 +171,9 @@ jobs:
           stage="lizard-${{ needs.qualify.outputs.tag }}-${{ matrix.target }}"
           mkdir "$stage"
           cp "target/${{ matrix.target }}/release/lizard" "$stage/"
+          cp "dev/interop-check/target/${{ matrix.target }}/release/interop-check" "$stage/"
           cp README.md LICENSE config.toml "$stage/"
+          cp dev/interop-check/README.md "$stage/interop-check.README.md"
           tar -czf "$stage.tar.gz" "$stage"
           shasum -a 256 "$stage.tar.gz" > "$stage.tar.gz.sha256"
 
@@ -176,7 +184,9 @@ jobs:
           $stage = "lizard-${{ needs.qualify.outputs.tag }}-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $stage | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/lizard.exe" -Destination $stage
+          Copy-Item "dev/interop-check/target/${{ matrix.target }}/release/interop-check.exe" -Destination $stage
           Copy-Item README.md, LICENSE, config.toml -Destination $stage
+          Copy-Item dev/interop-check/README.md -Destination "$stage/interop-check.README.md"
           Compress-Archive -Path $stage -DestinationPath "$stage.zip"
           Get-FileHash "$stage.zip" -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  $stage.zip" } |

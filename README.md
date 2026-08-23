@@ -228,8 +228,10 @@ also run in CI.
 ## CI & releases
 
 - **CI** (`.github/workflows/ci.yml`) runs on every push to `main` and every
-  pull request: frontend test + build, `cargo fmt`/`clippy`, and `cargo test` +
-  `cargo build --release` on Linux, macOS, and Windows.
+  pull request: frontend test + build, `cargo fmt`/`clippy`, `cargo test` +
+  `cargo build --release` on Linux, macOS, and Windows, and an ACME interop
+  job that runs the real [`instant-acme`](dev/interop-check) client against a
+  freshly built instance — see `ACME.md`.
 - **Prepare Release** (`.github/workflows/release.yml`) is manual
   (Actions -> Prepare Release -> Run workflow, from `main`) and takes a `bump`
   input of `patch`, `minor`, or `major`. It updates `Cargo.toml`, `Cargo.lock`,
@@ -245,6 +247,9 @@ also run in CI.
   the GitHub Release. Reruns are safe when the existing tag already points to
   the same SHA; a tag pointing anywhere else fails the workflow. No release
   workflow commits directly to protected `main`.
+  Each platform archive bundles both `lizard` and the
+  [`interop-check`](dev/interop-check) binary, so a release download always
+  carries a way to independently re-verify that build's ACME conformance.
 
 ### Release bot token
 

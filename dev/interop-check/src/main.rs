@@ -5,13 +5,13 @@
 
 use std::sync::Arc;
 
+use axum::Router;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
-use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client as HyperClient;
+use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use instant_acme::{
     Account, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus, RetryPolicy,
@@ -97,8 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 challenge.token,
                 key_authorization.as_str()
             );
-            *challenge_state.lock().await =
-                Some((challenge.token.clone(), key_authorization.as_str().to_string()));
+            *challenge_state.lock().await = Some((
+                challenge.token.clone(),
+                key_authorization.as_str().to_string(),
+            ));
             challenge.set_ready().await?;
         }
     }

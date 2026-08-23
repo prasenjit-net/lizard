@@ -95,3 +95,51 @@ jobs:
           bin=target/release/lizard
           [ -f "$bin.exe" ] && bin="$bin.exe"
           "$bin" --version
+
+  # Runs the ACME protocol through a real, independently maintained client
+  # (instant-acme, see dev/interop-check) rather than only this project's
+  # own tests — that's exactly what caught a genuine RFC 8555 conformance
+  # bug during development (see ACME.md). One OS is enough: this is a
+  # protocol-behavior check, not a platform-specific one.
+  interop:
+    name: ACME interop check (instant-acme)
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ui-dist
+          path: ui/dist
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+        with:
+          key: interop
+          workspaces: |
+            .
+            dev/interop-check
+
+      - run: cargo build --release --locked
+
+      - name: Start lizard
+        run: |
+          set -euo pipefail
+          ./target/release/lizard &
+          echo $! > lizard.pid
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/directory >/dev/null && exit 0
+            sleep 0.5
+          done
+          echo "::error::lizard did not become ready within 15s"
+          exit 1
+
+      - name: Run instant-acme interop check
+        working-directory: dev/interop-check
+        run: cargo run --locked
+
+      - name: Stop lizard
+        if: always()
+        run: kill "$(cat lizard.pid)" 2>/dev/null || true

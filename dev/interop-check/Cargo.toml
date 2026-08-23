@@ -7,7 +7,15 @@ publish = false
 [dependencies]
 axum = "0.8"
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
-instant-acme = { version = "0.8", features = ["rcgen"] }
+# default-features off to skip aws-lc-rs (needs a C/CMake toolchain, a real
+# cross-compilation risk for the release build's x86_64-apple-darwin leg)
+# in favor of ring, the same crypto backend the main lizard binary already
+# uses successfully across this exact target matrix.
+instant-acme = { version = "0.8", default-features = false, features = [
+    "hyper-rustls",
+    "rcgen",
+    "ring",
+] }
 pem = "4"
 rustls-pki-types = "1"
 tokio = { version = "1", features = ["full"] }

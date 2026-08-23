@@ -33,6 +33,9 @@ pub enum AppError {
     #[error("db error: {0}")]
     Db(#[from] rusqlite::Error),
 
+    #[error("http client error: {0}")]
+    Http(#[from] reqwest::Error),
+
     #[error("{0}")]
     Internal(String),
 }
@@ -46,6 +49,7 @@ impl AppError {
             | AppError::Io(_)
             | AppError::Ca(_)
             | AppError::Db(_)
+            | AppError::Http(_)
             | AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -58,6 +62,7 @@ impl AppError {
             AppError::Io(_) => "IO_ERROR",
             AppError::Ca(_) => "CA_ERROR",
             AppError::Db(_) => "DB_ERROR",
+            AppError::Http(_) => "HTTP_ERROR",
             AppError::Internal(_) => "INTERNAL",
         }
     }
@@ -73,17 +78,19 @@ impl IntoResponse for AppError {
         }
         // Client-facing messages: BadRequest/NotFound/Internal are safe —
         // their text is always authored by our own handlers. Config, Io,
-        // Ca, and Db wrap a library error via `#[from]`/format!, which can
-        // include local file paths, SQL, or OS error text, so those get a
-        // generic message instead; the real detail already went to
-        // tracing above.
+        // Ca, Db, and Http wrap a library error via `#[from]`/format!,
+        // which can include local file paths, SQL, or OS error text, so
+        // those get a generic message instead; the real detail already
+        // went to tracing above.
         let message = match &self {
             AppError::BadRequest(_) | AppError::NotFound(_) | AppError::Internal(_) => {
                 self.to_string()
             }
-            AppError::Config(_) | AppError::Io(_) | AppError::Ca(_) | AppError::Db(_) => {
-                "an internal error occurred".to_string()
-            }
+            AppError::Config(_)
+            | AppError::Io(_)
+            | AppError::Ca(_)
+            | AppError::Db(_)
+            | AppError::Http(_) => "an internal error occurred".to_string(),
         };
         let body = json!({
             "error": {

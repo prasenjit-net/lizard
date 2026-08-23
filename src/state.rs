@@ -25,6 +25,10 @@ pub struct AppState {
     pub events: broadcast::Sender<Event>,
     pub tasks: TaskStore,
     pub nonces: NonceStore,
+    /// Shared client for outbound http-01 challenge validation requests —
+    /// built once so validations reuse its connection pool rather than
+    /// paying a fresh TLS/TCP handshake per check.
+    pub http_client: reqwest::Client,
     // Not read anywhere yet — the ACME handlers that sign certificates
     // land in a later milestone. See the module doc comment on `crate::ca`.
     #[allow(dead_code)]
@@ -51,11 +55,16 @@ impl AppState {
             .base_url
             .clone()
             .unwrap_or_else(|| format!("http://{}:{}", config.server.host, config.server.port));
+        let http_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .timeout(std::time::Duration::from_secs(10))
+            .build()?;
         Ok(Self {
             external_base_url,
             events,
             tasks: TaskStore::with_examples(),
             nonces: NonceStore::new(),
+            http_client,
             ca,
             db,
             latest_metrics: RwLock::new(None),

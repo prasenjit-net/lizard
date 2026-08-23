@@ -46,7 +46,7 @@ export default function DashboardPage() {
           icon={<IconCpu size={18} />}
           label="CPU"
           value={metrics ? `${metrics.cpu.toFixed(0)}%` : "—"}
-          sub="simulated load"
+          sub="host usage"
           series={cpuSeries}
           max={100}
         />
@@ -54,7 +54,7 @@ export default function DashboardPage() {
           icon={<IconDatabase size={18} />}
           label="Memory"
           value={metrics ? `${metrics.memory.toFixed(0)}%` : "—"}
-          sub="simulated usage"
+          sub="host usage"
           series={memSeries}
           max={100}
           color="var(--chart-2)"

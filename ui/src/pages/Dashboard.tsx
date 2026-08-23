@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import ActivityFeed from "../components/ActivityFeed";
 import Badge from "../components/Badge";
-import LiveChart from "../components/LiveChart";
 import StatCard from "../components/StatCard";
 import { useLive } from "../context/LiveContext";
 import { useToast } from "../context/ToastContext";
@@ -79,14 +78,6 @@ export default function DashboardPage() {
           sub={certsQuery.data ? `${validCerts} valid, ${revokedCerts} revoked` : "waiting for data"}
         />
       </div>
-
-      <section className="card">
-        <div className="card-head">
-          <h2>Live metrics</h2>
-          <span className="card-hint">pushed over WebSocket every 2 s</span>
-        </div>
-        <LiveChart history={history} />
-      </section>
 
       <section className="card">
         <div className="card-head">

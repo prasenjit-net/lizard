@@ -63,10 +63,14 @@ impl AcmeError {
         Self::new(StatusCode::NOT_FOUND, "malformed", detail)
     }
 
-    // order_not_ready / bad_csr / rejected_identifier land with the
-    // order/authz/finalize handlers in a later milestone — added here
-    // early they'd just be unused `pub fn`s (this is a binary crate, so
-    // `dead_code` fires on those same as anything private).
+    pub fn rejected_identifier(detail: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, "rejectedIdentifier", detail)
+    }
+
+    // order_not_ready / bad_csr land with the finalize handler in a later
+    // milestone — added here early they'd just be unused `pub fn`s (this
+    // is a binary crate, so `dead_code` fires on those same as anything
+    // private).
 
     pub fn server_internal(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, "serverInternal", detail)

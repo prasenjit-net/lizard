@@ -1,8 +1,12 @@
 pub mod account;
+pub mod authz;
+pub mod challenge;
 pub mod directory;
 pub mod error;
 pub mod jws;
 pub mod nonce;
+pub mod order;
+mod urls;
 
 use axum::extract::{Request, State};
 use axum::http::{HeaderValue, StatusCode};
@@ -26,6 +30,10 @@ pub fn router(state: SharedState) -> Router<SharedState> {
         .route("/new-nonce", get(new_nonce))
         .route("/new-account", post(account::new_account))
         .route("/account/{id}", post(account::update_account))
+        .route("/new-order", post(order::new_order))
+        .route("/order/{id}", post(order::get_order))
+        .route("/authz/{id}", post(authz::get_authz))
+        .route("/challenge/{id}", post(challenge::respond_challenge))
         // Without its own fallback, an unmatched /acme/* path falls
         // through to the outer router's fallback — the SPA/static-asset
         // handler — and an ACME client gets an HTML page (or a 503 "UI

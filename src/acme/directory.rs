@@ -2,6 +2,7 @@ use axum::extract::State;
 use axum::Json;
 use serde_json::{json, Value};
 
+use super::urls;
 use crate::state::SharedState;
 
 /// RFC 8555 §7.1.1 — the one endpoint a client is expected to know in
@@ -11,8 +12,8 @@ pub async fn directory(State(state): State<SharedState>) -> Json<Value> {
     let base = &state.external_base_url;
     Json(json!({
         "newNonce": format!("{base}/acme/new-nonce"),
-        "newAccount": format!("{base}/acme/new-account"),
-        "newOrder": format!("{base}/acme/new-order"),
+        "newAccount": urls::new_account(&state),
+        "newOrder": urls::new_order(&state),
         "revokeCert": format!("{base}/acme/revoke-cert"),
         "keyChange": format!("{base}/acme/key-change"),
     }))

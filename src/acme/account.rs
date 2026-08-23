@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::error::AcmeError;
 use super::jws::{self, Jwk, KeyId, ParsedJws};
+use super::urls;
 use crate::db::Db;
 use crate::state::SharedState;
 
@@ -35,12 +36,8 @@ struct AccountUpdate {
     status: Option<String>,
 }
 
-fn account_url(state: &SharedState, id: &str) -> String {
-    format!("{}/acme/account/{id}", state.external_base_url)
-}
-
 fn account_response(state: &SharedState, account: &AccountRow, status: StatusCode) -> Response {
-    let url = account_url(state, &account.id);
+    let url = urls::account(state, &account.id);
     let mut body = json!({
         "status": account.status,
         "orders": format!("{url}/orders"),
@@ -144,7 +141,7 @@ pub async fn new_account(
     State(state): State<SharedState>,
     body: Bytes,
 ) -> Result<Response, AcmeError> {
-    let url = format!("{}/acme/new-account", state.external_base_url);
+    let url = urls::new_account(&state);
     let parsed = jws::parse_and_check_nonce(&body, &url, &state.nonces)?;
 
     let KeyId::Jwk(jwk) = parsed.key_id.clone() else {
@@ -207,7 +204,7 @@ pub async fn update_account(
     Path(id): Path<String>,
     body: Bytes,
 ) -> Result<Response, AcmeError> {
-    let url = account_url(&state, &id);
+    let url = urls::account(&state, &id);
     let parsed = jws::parse_and_check_nonce(&body, &url, &state.nonces)?;
     let (mut account, payload) = authenticate(&state, parsed)?;
     if account.id != id {

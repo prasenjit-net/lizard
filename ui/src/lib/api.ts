@@ -46,13 +46,85 @@ export interface ActivityLogEntry {
   timestampMs: number;
 }
 
+export interface CertExtensionInfo {
+  oid: string;
+  name: string;
+  critical: boolean;
+  value: string;
+}
+
+export interface CertAttributes {
+  version: string;
+  serial: string;
+  subject: string;
+  issuer: string;
+  notBefore: string;
+  notAfter: string;
+  signatureAlgorithm: string;
+  publicKeyAlgorithm: string;
+  subjectAltNames: string[];
+  parsedExtensions: ParsedCertExtensions;
+  extensions: CertExtensionInfo[];
+}
+
+export interface ParsedCertExtensions {
+  authorityKeyIdentifier: AuthorityKeyIdentifierInfo | null;
+  subjectAlternativeName: SubjectAlternativeNameInfo | null;
+  keyUsage: KeyUsageInfo | null;
+  extendedKeyUsage: ExtendedKeyUsageInfo | null;
+  subjectKeyIdentifier: string | null;
+  basicConstraints: BasicConstraintsInfo | null;
+}
+
+export interface AuthorityKeyIdentifierInfo {
+  keyIdentifier: string | null;
+  authorityCertIssuer: string[];
+  authorityCertSerial: string | null;
+}
+
+export interface SubjectAlternativeNameInfo {
+  names: string[];
+}
+
+export interface KeyUsageInfo {
+  flags: string[];
+  digitalSignature: boolean;
+  nonRepudiation: boolean;
+  keyEncipherment: boolean;
+  dataEncipherment: boolean;
+  keyAgreement: boolean;
+  keyCertSign: boolean;
+  crlSign: boolean;
+  encipherOnly: boolean;
+  decipherOnly: boolean;
+}
+
+export interface ExtendedKeyUsageInfo {
+  usages: string[];
+  any: boolean;
+  serverAuth: boolean;
+  clientAuth: boolean;
+  codeSigning: boolean;
+  emailProtection: boolean;
+  timeStamping: boolean;
+  ocspSigning: boolean;
+  other: string[];
+}
+
+export interface BasicConstraintsInfo {
+  ca: boolean;
+  pathLenConstraint: number | null;
+}
+
 export interface CaInfo {
   rootCertPem: string;
+  attributes: CertAttributes | null;
 }
 
 export interface Certificate {
   id: string;
   orderId: string;
+  accountId: string;
   identifiers: string[];
   serial: string;
   status: "valid" | "revoked";
@@ -67,6 +139,7 @@ export interface CertificateDetail extends Certificate {
   notBefore: string;
   notAfter: string;
   pemChain: string;
+  attributes: CertAttributes | null;
 }
 
 export type OrderStatus = "pending" | "ready" | "processing" | "valid" | "invalid";

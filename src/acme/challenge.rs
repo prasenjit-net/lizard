@@ -264,7 +264,7 @@ fn spawn_validation(
                 failure.detail()
             ),
         };
-        state.activity("certificate", message);
+        state.audit("order", format!("order {}: {message}", authz.order_id));
     });
 }
 

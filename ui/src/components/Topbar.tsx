@@ -16,7 +16,12 @@ const TITLES: Record<string, string> = {
 
 export default function Topbar({ onMenu }: { onMenu: () => void }) {
   const { pathname } = useLocation();
-  const title = TITLES[pathname] ?? "Not found";
+  const title =
+    TITLES[pathname] ??
+    (pathname.startsWith("/accounts/") ? "Account Detail" : undefined) ??
+    (pathname.startsWith("/orders/") ? "Order Detail" : undefined) ??
+    (pathname.startsWith("/certificates/") ? "Certificate Detail" : undefined) ??
+    "Not found";
   return (
     <header className="sticky top-0 z-30 flex h-[60px] items-center gap-3 border-b border-line bg-canvas/80 px-4 backdrop-blur-md md:px-6">
       <button className="icon-btn" onClick={onMenu} aria-label="Toggle sidebar">

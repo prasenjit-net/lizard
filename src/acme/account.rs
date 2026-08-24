@@ -191,7 +191,7 @@ pub async fn new_account(
         status: "valid".to_string(),
         contact: payload.contact,
     };
-    state.activity("account", format!("created ACME account {}", account.id));
+    state.audit("account", format!("created ACME account {}", account.id));
     Ok(account_response(&state, &account, StatusCode::CREATED))
 }
 
@@ -248,7 +248,7 @@ pub async fn update_account(
     }
 
     if !changes.is_empty() {
-        state.activity(
+        state.audit(
             "account",
             format!("{} account {}", changes.join(" and "), account.id),
         );

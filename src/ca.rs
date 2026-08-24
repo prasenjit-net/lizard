@@ -36,6 +36,7 @@ pub struct IssuedCertificate {
 pub struct Ca {
     root_cert_pem: String,
     issuer: Issuer<'static, KeyPair>,
+    generated_root: bool,
 }
 
 impl Ca {
@@ -65,6 +66,7 @@ impl Ca {
         Ok(Ca {
             root_cert_pem: cert_pem,
             issuer,
+            generated_root: !root_exists,
         })
     }
 
@@ -72,6 +74,10 @@ impl Ca {
     /// stores or serving to operators.
     pub fn root_cert_pem(&self) -> &str {
         &self.root_cert_pem
+    }
+
+    pub fn generated_root(&self) -> bool {
+        self.generated_root
     }
 
     /// Signs a DER-encoded CSR into a leaf certificate chained to this CA's

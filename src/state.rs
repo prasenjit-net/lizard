@@ -47,6 +47,7 @@ impl AppState {
         let (events, _) = broadcast::channel(64);
         let access_log = AccessLog::open(config.logging.access_log.as_deref()).await;
         let ca = Ca::load_or_generate(&config.ca)?;
+        let generated_root = ca.generated_root();
         let db = Db::open(&config.ca.db_path)?;
         let external_base_url = config
             .server
@@ -57,7 +58,7 @@ impl AppState {
             .redirect(reqwest::redirect::Policy::limited(3))
             .timeout(std::time::Duration::from_secs(10))
             .build()?;
-        Ok(Self {
+        let state = Self {
             external_base_url,
             events,
             tasks: TaskStore::with_examples(),
@@ -72,7 +73,11 @@ impl AppState {
             started_at_ms: chrono::Utc::now().timestamp_millis(),
             access_log,
             config,
-        })
+        };
+        if generated_root {
+            state.audit("ca", "generated CA root certificate");
+        }
+        Ok(state)
     }
 
     pub fn broadcast(&self, event: Event) {
@@ -80,8 +85,12 @@ impl AppState {
         let _ = self.events.send(event);
     }
 
-    /// Push a human-readable entry to every client's activity feed.
     pub fn activity(&self, kind: &str, message: impl Into<String>) {
+        self.broadcast_activity(kind, message.into());
+    }
+
+    /// Persist a human-readable mutation summary and push it to live clients.
+    pub fn audit(&self, kind: &str, message: impl Into<String>) {
         let now = chrono::Utc::now();
         let timestamp_ms = now.timestamp_millis();
         let message = message.into();
@@ -99,6 +108,14 @@ impl AppState {
             kind: kind.to_string(),
             message,
             timestamp_ms,
+        });
+    }
+
+    fn broadcast_activity(&self, kind: &str, message: String) {
+        self.broadcast(Event::Activity {
+            kind: kind.to_string(),
+            message,
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
         });
     }
 }

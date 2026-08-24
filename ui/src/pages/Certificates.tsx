@@ -6,9 +6,11 @@
 // already broadcast a "certificate" activity on every lifecycle event, so
 // this just watches for those rather than needing its own WebSocket
 // message type.
+import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Badge from "../components/Badge";
+import CertificateAttributes from "../components/CertificateAttributes";
 import { useLive } from "../context/LiveContext";
 import { useToast } from "../context/ToastContext";
 import {
@@ -132,6 +134,10 @@ export function CaRootCard() {
           <pre className="max-h-[220px] overflow-auto rounded-lg border border-line bg-surface-2 p-3 font-mono text-[0.76rem] leading-relaxed break-all whitespace-pre-wrap">
             {caQuery.data.rootCertPem}
           </pre>
+          <div className="mt-3 rounded-lg border border-line bg-surface-2 p-3">
+            <div className="mb-2 text-sm font-semibold">CA certificate attributes</div>
+            <CertificateAttributes attributes={caQuery.data.attributes} />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2.5">
             <button className="btn btn-secondary" onClick={copy}>
               <IconCopy size={16} /> Copy
@@ -273,13 +279,25 @@ function CertificateDetailPanel({ id }: { id: string }) {
         <div>
           <dt className="text-ink-faint">Account</dt>
           <dd className="m-0 truncate font-mono" title={detail.accountId}>
-            {detail.accountId}
+            <Link
+              to="/accounts/$accountId"
+              params={{ accountId: detail.accountId }}
+              className="text-accent hover:underline"
+            >
+              {detail.accountId}
+            </Link>
           </dd>
         </div>
         <div>
           <dt className="text-ink-faint">Order</dt>
           <dd className="m-0 truncate font-mono" title={detail.orderId}>
-            {detail.orderId}
+            <Link
+              to="/orders/$orderId"
+              params={{ orderId: detail.orderId }}
+              className="text-accent hover:underline"
+            >
+              {detail.orderId}
+            </Link>
           </dd>
         </div>
         {detail.status === "revoked" ? (
@@ -454,6 +472,7 @@ export function CertificatesCard() {
                 <th className={TH}>Identifiers</th>
                 <th className={TH}>Status</th>
                 <th className={TH}>Serial</th>
+                <th className={TH}>Account</th>
                 <th className={TH}>Issued</th>
                 <th className={TH}>Expires</th>
                 <th className={`${TH} text-right`}>Actions</th>
@@ -477,9 +496,15 @@ export function CertificatesCard() {
                       </td>
                       <td className={TD}>
                         {cert.identifiers.map((name) => (
-                          <div key={name} className="font-mono text-[0.82rem]">
+                          <Link
+                            key={name}
+                            to="/certificates/$certificateId"
+                            params={{ certificateId: cert.id }}
+                            onClick={(event) => event.stopPropagation()}
+                            className="block font-mono text-[0.82rem] text-accent hover:underline"
+                          >
                             {name}
-                          </div>
+                          </Link>
                         ))}
                       </td>
                       <td className={TD}>
@@ -489,6 +514,17 @@ export function CertificatesCard() {
                       </td>
                       <td className={`${TD} font-mono text-[0.78rem] text-ink-faint`}>
                         {cert.serial}
+                      </td>
+                      <td className={TD}>
+                        <Link
+                          to="/accounts/$accountId"
+                          params={{ accountId: cert.accountId }}
+                          onClick={(event) => event.stopPropagation()}
+                          className="block max-w-[150px] truncate font-mono text-[0.78rem] text-accent hover:underline"
+                          title={cert.accountId}
+                        >
+                          {cert.accountId}
+                        </Link>
                       </td>
                       <td className={`${TD} text-[0.82rem] text-ink-muted`}>
                         {new Date(cert.issuedAt).toLocaleString()}
@@ -519,7 +555,7 @@ export function CertificatesCard() {
                     {expanded ? (
                       <tr className="border-b border-line bg-surface-2/40 last:border-b-0">
                         <td className={TD} />
-                        <td className={TD} colSpan={6}>
+                        <td className={TD} colSpan={7}>
                           <CertificateDetailPanel id={cert.id} />
                         </td>
                       </tr>
@@ -749,7 +785,18 @@ export function OrdersCard() {
                         {new Date(order.expires).toLocaleString()}
                       </td>
                       <td className={`${TD} font-mono text-[0.78rem] text-ink-faint`}>
-                        {order.certificateId ? order.certificateId : "—"}
+                        {order.certificateId ? (
+                          <Link
+                            to="/certificates/$certificateId"
+                            params={{ certificateId: order.certificateId }}
+                            onClick={(event) => event.stopPropagation()}
+                            className="text-accent hover:underline"
+                          >
+                            {order.certificateId}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                     {expanded ? (
@@ -854,7 +901,14 @@ export function AccountsCard() {
               {accounts.map((account: Account) => (
                 <tr key={account.id} className="border-b border-line last:border-b-0 hover:bg-surface-2">
                   <td className={TD}>
-                    <CopyableId value={account.id} />
+                    <Link
+                      to="/accounts/$accountId"
+                      params={{ accountId: account.id }}
+                      className="block max-w-[160px] truncate font-mono text-[0.78rem] text-accent hover:underline"
+                      title={account.id}
+                    >
+                      {account.id}
+                    </Link>
                   </td>
                   <td className={TD}>
                     <CopyableId value={account.jwkThumbprint} />

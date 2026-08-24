@@ -146,7 +146,7 @@ pub async fn revoke_cert(
         params![now, payload.reason, certificate.id],
     )?;
 
-    state.activity(
+    state.audit(
         "certificate",
         format!("revoked certificate {}", certificate.id),
     );

@@ -202,7 +202,7 @@ pub async fn new_order(
         tx.commit()?;
     }
 
-    state.activity(
+    state.audit(
         "order",
         format!(
             "created order {order_id} for {}",
@@ -353,7 +353,7 @@ pub async fn finalize_order(
         tx.commit()?;
     }
 
-    state.activity(
+    state.audit(
         "certificate",
         format!(
             "issued a certificate for {}",

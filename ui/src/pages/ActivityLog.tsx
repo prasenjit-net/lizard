@@ -7,26 +7,24 @@ import { IconActivity, IconSearch } from "../icons";
 import { api, type ActivityLogEntry } from "../lib/api";
 import { timeAgo } from "../lib/format";
 
-type KindFilter = "all" | "account" | "order" | "challenge" | "certificate" | "task" | "socket";
+type KindFilter = "all" | "account" | "order" | "certificate" | "ca";
 
 const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "account", label: "Accounts" },
   { value: "order", label: "Orders" },
-  { value: "challenge", label: "Challenges" },
   { value: "certificate", label: "Certificates" },
-  { value: "task", label: "Tasks" },
-  { value: "socket", label: "Socket" },
+  { value: "ca", label: "CA" },
 ];
 
 const KIND_TONE: Record<string, "neutral" | "accent" | "ok" | "warn" | "err" | "info"> = {
   account: "ok",
   order: "info",
-  challenge: "warn",
   certificate: "accent",
-  task: "neutral",
-  socket: "info",
+  ca: "ok",
 };
+
+const AUDIT_KINDS = new Set(["account", "order", "certificate", "ca"]);
 
 function matches(entry: ActivityLogEntry, search: string, kind: KindFilter) {
   const kindMatches = kind === "all" || entry.kind === kind;
@@ -55,7 +53,11 @@ export default function ActivityLogPage() {
   const latestActivity = activities[0] ?? null;
   const lastSeenTimestamp = useRef(latestActivity?.timestampMs ?? null);
   useEffect(() => {
-    if (latestActivity && latestActivity.timestampMs !== lastSeenTimestamp.current) {
+    if (
+      latestActivity &&
+      AUDIT_KINDS.has(latestActivity.kind) &&
+      latestActivity.timestampMs !== lastSeenTimestamp.current
+    ) {
       lastSeenTimestamp.current = latestActivity.timestampMs;
       queryClient.invalidateQueries({ queryKey: ["activity"] });
     }

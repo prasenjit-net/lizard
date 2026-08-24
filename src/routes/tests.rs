@@ -112,7 +112,7 @@ async fn tasks_seed_list_has_three_items() {
 }
 
 #[tokio::test]
-async fn activity_log_starts_empty() {
+async fn activity_log_records_generated_ca_root() {
     let app = test_app().await;
     let res = app
         .oneshot(request(Method::GET, "/api/activity"))
@@ -120,7 +120,10 @@ async fn activity_log_starts_empty() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body = body_json(res).await;
-    assert_eq!(body.as_array().unwrap().len(), 0);
+    let entries = body.as_array().unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["kind"], "ca");
+    assert_eq!(entries[0]["summary"], "generated CA root certificate");
 }
 
 #[tokio::test]
@@ -150,7 +153,7 @@ async fn create_task_then_list_reflects_it() {
 }
 
 #[tokio::test]
-async fn mutations_create_activity_log_entries() {
+async fn template_task_mutations_do_not_create_audit_log_entries() {
     let app = test_app().await;
 
     let create = app
@@ -172,8 +175,8 @@ async fn mutations_create_activity_log_entries() {
     let body = body_json(activity).await;
     let entries = body.as_array().unwrap();
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0]["kind"], "task");
-    assert_eq!(entries[0]["summary"], "Task \"Write audit tests\" created");
+    assert_eq!(entries[0]["kind"], "ca");
+    assert_eq!(entries[0]["summary"], "generated CA root certificate");
     assert!(entries[0]["createdAt"].is_string());
     assert!(entries[0]["timestampMs"].is_number());
 }

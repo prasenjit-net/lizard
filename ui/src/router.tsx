@@ -4,13 +4,16 @@
 // component, so the sidebar/topbar shell wraps every page via <Outlet/>.
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import Layout from "./components/Layout";
+import AccountDetailPage from "./pages/AccountDetail";
 import AccountsPage from "./pages/Accounts";
 import ActivityLogPage from "./pages/ActivityLog";
 import CertificateAuthorityPage from "./pages/CertificateAuthority";
+import CertificateDetailPage from "./pages/CertificateDetail";
 import CertificatesPage from "./pages/Certificates";
 import ComponentsPage from "./pages/Components";
 import DashboardPage from "./pages/Dashboard";
 import NotFoundPage from "./pages/NotFound";
+import OrderDetailPage from "./pages/OrderDetail";
 import OrdersPage from "./pages/Orders";
 import SettingsPage from "./pages/Settings";
 
@@ -30,16 +33,34 @@ const certificatesRoute = createRoute({
   component: CertificatesPage,
 });
 
+const certificateDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/certificates/$certificateId",
+  component: CertificateDetailPage,
+});
+
 const ordersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/orders",
   component: OrdersPage,
 });
 
+const orderDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/orders/$orderId",
+  component: OrderDetailPage,
+});
+
 const accountsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/accounts",
   component: AccountsPage,
+});
+
+const accountDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/accounts/$accountId",
+  component: AccountDetailPage,
 });
 
 const activityLogRoute = createRoute({
@@ -69,8 +90,11 @@ const settingsRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   certificatesRoute,
+  certificateDetailRoute,
   ordersRoute,
+  orderDetailRoute,
   accountsRoute,
+  accountDetailRoute,
   activityLogRoute,
   certificateAuthorityRoute,
   componentsRoute,

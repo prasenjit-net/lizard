@@ -1,6 +1,6 @@
 [package]
 name = "lizard"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "ACME server that issues SSL/TLS certificates from its own private CA"
 

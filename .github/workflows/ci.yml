@@ -143,3 +143,25 @@ jobs:
       - name: Stop lizard
         if: always()
         run: kill "$(cat lizard.pid)" 2>/dev/null || true
+
+      # Same flow again over lizard's in-process HTTPS (--tls), with the
+      # client trusting only lizard's own root, which issued the server cert.
+      - name: Start lizard (HTTPS)
+        run: |
+          set -euo pipefail
+          ./target/release/lizard --tls --port 8443 &
+          echo $! > lizard-tls.pid
+          for _ in $(seq 1 30); do
+            curl -sf --cacert data/ca/root-cert.pem https://127.0.0.1:8443/directory >/dev/null && exit 0
+            sleep 0.5
+          done
+          echo "::error::lizard (TLS) did not become ready within 15s"
+          exit 1
+
+      - name: Run instant-acme interop check (HTTPS)
+        working-directory: dev/interop-check
+        run: cargo run --locked -- https://127.0.0.1:8443/directory ../../data/ca/root-cert.pem
+
+      - name: Stop lizard (HTTPS)
+        if: always()
+        run: kill "$(cat lizard-tls.pid)" 2>/dev/null || true

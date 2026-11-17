@@ -124,9 +124,27 @@ pub async fn error_demo(Query(params): Query<HashMap<String, String>>) -> AppRes
 /// The CA's root certificate, for the admin UI to display/download for
 /// installation into trust stores.
 pub async fn ca_info(State(state): State<SharedState>) -> Json<Value> {
+    // `serverTls` describes the certificate this server itself serves over
+    // HTTPS (issued by the root above), or is null when TLS is disabled.
+    // The private key is never included.
+    let server_tls = state.server_tls.as_ref().map(|lock| {
+        let cert = lock.read().unwrap().clone();
+        let not_after = chrono::DateTime::from_timestamp(cert.not_after, 0)
+            .map(|t| t.to_rfc3339())
+            .unwrap_or_default();
+        json!({
+            "sans": cert.sans,
+            "serial": cert.serial,
+            "notAfter": not_after,
+            "renewalDue": cert.renewal_due(chrono::Utc::now().timestamp()),
+            "certChainPem": cert.chain_pem,
+            "attributes": parse_cert_attributes(&cert.chain_pem),
+        })
+    });
     Json(json!({
         "rootCertPem": state.ca.root_cert_pem(),
         "attributes": parse_cert_attributes(state.ca.root_cert_pem()),
+        "serverTls": server_tls,
     }))
 }
 

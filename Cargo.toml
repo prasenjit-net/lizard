@@ -28,6 +28,9 @@ uuid = { version = "1.25.0", features = ["v4"] }
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls"] }
 sysinfo = "0.38.4"
 x509-parser = { version = "0.18.1", features = ["verify"] }
+axum-server = { version = "0.9.2", features = ["tls-rustls"] }
+rustls = "0.23"
+url = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

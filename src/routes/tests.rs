@@ -276,6 +276,46 @@ async fn ca_info_returns_a_pem_encoded_root_cert() {
         .as_str()
         .unwrap()
         .contains("BEGIN CERTIFICATE"));
+    // TLS is off in the default test config.
+    assert!(body["serverTls"].is_null());
+}
+
+#[tokio::test]
+async fn ca_info_describes_the_server_tls_certificate_when_enabled() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let mut config = AppConfig {
+        ca: crate::config::CaConfig {
+            root_cert_path: dir.path().join("root-cert.pem"),
+            root_key_path: dir.path().join("root-key.pem"),
+            db_path: dir.path().join("lizard.db"),
+            ..AppConfig::default().ca
+        },
+        ..AppConfig::default()
+    };
+    config.tls.enabled = true;
+    config.tls.cert_path = dir.path().join("tls/cert.pem");
+    config.tls.key_path = dir.path().join("tls/key.pem");
+    config.tls.external_hostnames = vec!["ca.example.com".into()];
+    let state = Arc::new(AppState::new(config).await.unwrap());
+    let app = crate::routes::router(state);
+
+    let res = app.oneshot(request(Method::GET, "/api/ca")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res).await;
+    let tls = &body["serverTls"];
+    let sans: Vec<&str> = tls["sans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert!(sans.contains(&"ca.example.com"));
+    assert!(sans.contains(&"localhost"));
+    assert_eq!(tls["renewalDue"], false);
+    let chain = tls["certChainPem"].as_str().unwrap();
+    assert_eq!(chain.matches("BEGIN CERTIFICATE").count(), 2);
+    assert!(!chain.contains("PRIVATE KEY"));
+    assert!(tls.get("keyPem").is_none());
 }
 
 #[tokio::test]

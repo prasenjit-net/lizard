@@ -8,6 +8,7 @@ mod routes;
 mod services;
 mod state;
 mod static_assets;
+mod tls;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -50,6 +51,19 @@ struct Cli {
     /// Disable the access log file entirely
     #[arg(long)]
     no_access_log: bool,
+
+    /// Serve HTTPS (only) with a certificate issued by this server's own CA
+    #[arg(long, conflicts_with = "no_tls")]
+    tls: bool,
+
+    /// Serve plain HTTP even if [tls].enabled is set
+    #[arg(long)]
+    no_tls: bool,
+
+    /// Add an extra SAN to the server certificate (repeatable); appended to
+    /// [tls].external_hostnames
+    #[arg(long = "tls-hostname", value_name = "NAME")]
+    tls_hostnames: Vec<String>,
 }
 
 impl Cli {
@@ -69,6 +83,16 @@ impl Cli {
         if self.no_access_log {
             config.logging.access_log = None;
         }
+        if self.tls {
+            config.tls.enabled = true;
+        }
+        if self.no_tls {
+            config.tls.enabled = false;
+        }
+        config
+            .tls
+            .external_hostnames
+            .extend(self.tls_hostnames.iter().cloned());
     }
 }
 
@@ -98,22 +122,40 @@ async fn main() -> ExitCode {
 
 async fn run(config: AppConfig) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("{}:{}", config.server.host, config.server.port);
+    let tls_enabled = config.tls.enabled;
+    if tls_enabled {
+        tls::install_crypto_provider();
+    }
     let state = Arc::new(AppState::new(config).await?);
     services::metrics::spawn(state.clone());
 
-    let app = routes::router(state);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("listening on http://{addr}");
-
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(async {
+    let app = routes::router(state.clone());
+    let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
         tracing::info!("shutting down");
-    })
-    .await?;
+    };
+
+    if tls_enabled {
+        // HTTPS only: there is intentionally no plain-HTTP listener (and
+        // so no redirect) when TLS is on.
+        let rustls = tls::rustls_config(&state).await?;
+        tls::spawn_renewal(state.clone(), rustls.clone());
+        let listener = std::net::TcpListener::bind(&addr)?;
+        tracing::info!(
+            sans = %state.tls_sans.join(","),
+            "listening on https://{addr}"
+        );
+        tls::serve(listener, app, rustls, shutdown).await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        tracing::info!("listening on http://{addr}");
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown)
+        .await?;
+    }
 
     Ok(())
 }

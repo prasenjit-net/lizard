@@ -116,9 +116,22 @@ export interface BasicConstraintsInfo {
   pathLenConstraint: number | null;
 }
 
+/** The certificate this server itself serves over HTTPS, issued by its own
+ * root. Absent (null) when `[tls].enabled` is off. */
+export interface ServerTlsInfo {
+  sans: string[];
+  serial: string;
+  notAfter: string;
+  renewalDue: boolean;
+  /** Leaf followed by the root, as served in the TLS handshake. */
+  certChainPem: string;
+  attributes: CertAttributes | null;
+}
+
 export interface CaInfo {
   rootCertPem: string;
   attributes: CertAttributes | null;
+  serverTls: ServerTlsInfo | null;
 }
 
 export interface Certificate {

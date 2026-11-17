@@ -123,6 +123,35 @@ impl Ca {
             not_after,
         })
     }
+
+    /// Issues this server's own HTTPS certificate for `sans` (DNS names
+    /// and/or IP-address literals), returning it alongside its freshly
+    /// generated private key in PEM.
+    ///
+    /// Goes through the same `sign_csr` path as ACME-issued leaves — via an
+    /// in-memory CSR — so the server certificate can never drift from the
+    /// fixed non-CA / ServerAuth profile every other leaf gets.
+    pub fn issue_server_cert(
+        &self,
+        sans: &[String],
+        validity_days: i64,
+    ) -> AppResult<(IssuedCertificate, String)> {
+        if sans.is_empty() {
+            return Err(AppError::Internal(
+                "server certificate needs at least one SAN".into(),
+            ));
+        }
+        let key_pair = KeyPair::generate()?;
+        // `CertificateParams::new` turns IP-literal strings into iPAddress
+        // SANs and everything else into dNSName SANs.
+        let mut params = CertificateParams::new(sans.to_vec())?;
+        let mut distinguished_name = DistinguishedName::new();
+        distinguished_name.push(DnType::CommonName, sans[0].as_str());
+        params.distinguished_name = distinguished_name;
+        let csr = params.serialize_request(&key_pair)?;
+        let issued = self.sign_csr(csr.der(), validity_days)?;
+        Ok((issued, key_pair.serialize_pem()))
+    }
 }
 
 fn generate_root(validity_years: i64) -> AppResult<(String, String)> {
@@ -246,6 +275,64 @@ mod tests {
         let (_, leaf) = x509_parser::parse_x509_certificate(&leaf_der).unwrap();
         assert_eq!(leaf.issuer(), root.subject());
         leaf.verify_signature(Some(root.public_key())).unwrap();
+    }
+
+    #[test]
+    fn issues_a_server_cert_with_dns_and_ip_sans() {
+        use rcgen::PublicKeyData;
+        use x509_parser::extensions::GeneralName;
+
+        let dir = TempDir::new().unwrap();
+        let ca = Ca::load_or_generate(&test_config(&dir)).unwrap();
+        let sans = vec![
+            "ca.example.com".to_string(),
+            "127.0.0.1".to_string(),
+            "::1".to_string(),
+        ];
+
+        let (issued, key_pem) = ca.issue_server_cert(&sans, 30).unwrap();
+
+        assert!(key_pem.contains("PRIVATE KEY"));
+        let root_der = pem::parse(ca.root_cert_pem()).unwrap().into_contents();
+        let (_, root) = x509_parser::parse_x509_certificate(&root_der).unwrap();
+        let (_, leaf) = x509_parser::parse_x509_certificate(&issued.der).unwrap();
+        leaf.verify_signature(Some(root.public_key())).unwrap();
+        assert!(!leaf.basic_constraints().unwrap().unwrap().value.ca);
+        assert!(
+            leaf.extended_key_usage()
+                .unwrap()
+                .unwrap()
+                .value
+                .server_auth
+        );
+
+        let names = &leaf
+            .subject_alternative_name()
+            .unwrap()
+            .unwrap()
+            .value
+            .general_names;
+        assert!(names
+            .iter()
+            .any(|n| matches!(n, GeneralName::DNSName("ca.example.com"))));
+        assert!(names
+            .iter()
+            .any(|n| matches!(n, GeneralName::IPAddress(b) if *b == [127, 0, 0, 1])));
+        assert!(names
+            .iter()
+            .any(|n| matches!(n, GeneralName::IPAddress(b) if b.len() == 16)));
+        // IP literals must not leak in as dNSName entries — TLS clients
+        // only match IP hosts against iPAddress SANs.
+        assert!(!names
+            .iter()
+            .any(|n| matches!(n, GeneralName::DNSName("127.0.0.1"))));
+
+        // The returned key is the one the certificate was issued for.
+        let key_pair = KeyPair::from_pem(&key_pem).unwrap();
+        assert_eq!(
+            key_pair.subject_public_key_info(),
+            leaf.public_key().raw.to_vec()
+        );
     }
 
     #[test]

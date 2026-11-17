@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
     pub ui: UiConfig,
     pub ca: CaConfig,
+    pub tls: TlsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,6 +96,41 @@ impl Default for CaConfig {
             root_validity_years: 10,
             cert_validity_days: 90,
             db_path: PathBuf::from("data/lizard.db"),
+        }
+    }
+}
+
+/// In-process HTTPS. When `enabled`, the server listens for HTTPS *only*
+/// (no plain-HTTP listener at all) using a leaf certificate issued by this
+/// server's own CA — there is deliberately no way to plug in an externally
+/// issued certificate. `cert_path`/`key_path` are just where that
+/// self-issued certificate is cached between restarts; it's (re)issued
+/// automatically whenever it's missing, no longer chains to the current
+/// root, has a stale SAN set, or is due for renewal (see `crate::tls`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TlsConfig {
+    pub enabled: bool,
+    pub cert_path: PathBuf,
+    pub key_path: PathBuf,
+    /// Extra SAN entries (DNS names or IP addresses) on top of the ones
+    /// derived automatically from `localhost`, `[server].host`, and
+    /// `[server].base_url` — typically the hostname clients actually use
+    /// to reach this server.
+    pub external_hostnames: Vec<String>,
+    /// Lifetime of the server certificate. Falls back to
+    /// `[ca].cert_validity_days` when unset.
+    pub validity_days: Option<i64>,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_path: PathBuf::from("data/tls/server-cert.pem"),
+            key_path: PathBuf::from("data/tls/server-key.pem"),
+            external_hostnames: Vec::new(),
+            validity_days: None,
         }
     }
 }
@@ -185,6 +221,48 @@ mod tests {
         assert_eq!(config.ca.root_validity_years, 5);
         assert_eq!(config.ca.cert_validity_days, 30);
         assert_eq!(config.ca.db_path, PathBuf::from("state.db"));
+    }
+
+    #[test]
+    fn tls_is_disabled_by_default() {
+        let config: AppConfig = toml::from_str("").unwrap();
+        assert!(!config.tls.enabled);
+        assert_eq!(
+            config.tls.cert_path,
+            PathBuf::from("data/tls/server-cert.pem")
+        );
+        assert!(config.tls.external_hostnames.is_empty());
+        assert_eq!(config.tls.validity_days, None);
+    }
+
+    #[test]
+    fn tls_section_overrides_defaults() {
+        let toml = r#"
+            [tls]
+            enabled = true
+            cert_path = "tls/cert.pem"
+            key_path = "tls/key.pem"
+            external_hostnames = ["ca.example.com", "10.0.0.5"]
+            validity_days = 30
+        "#;
+        let config: AppConfig = toml::from_str(toml).unwrap();
+        assert!(config.tls.enabled);
+        assert_eq!(config.tls.cert_path, PathBuf::from("tls/cert.pem"));
+        assert_eq!(config.tls.key_path, PathBuf::from("tls/key.pem"));
+        assert_eq!(
+            config.tls.external_hostnames,
+            vec!["ca.example.com".to_string(), "10.0.0.5".to_string()]
+        );
+        assert_eq!(config.tls.validity_days, Some(30));
+    }
+
+    #[test]
+    fn tls_section_rejects_external_cert_options() {
+        // There is no way to point at an externally-issued certificate;
+        // an attempt to configure one should fail loudly, not be ignored.
+        let result: Result<AppConfig, _> =
+            toml::from_str("[tls]\nenabled = true\nca_bundle = \"x.pem\"\n");
+        assert!(result.is_err());
     }
 
     #[test]

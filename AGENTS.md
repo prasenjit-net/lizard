@@ -17,6 +17,7 @@ Guidance for coding agents working in this repository.
 - `src/error.rs` defines the shared API error envelope (`AppError`, used by `/api/*`).
 - `src/static_assets.rs` serves embedded SPA assets and fallback routing.
 - `src/ca.rs` owns the root CA keypair/certificate and signs leaf certificates from CSRs (`rcgen`).
+- `src/tls.rs` implements opt-in in-process HTTPS (`[tls]`). It covers the SAN set, the reuse-or-reissue checks for the server cert issued by this CA, the hot-reloading renewal task, and the HTTPS-only `axum-server` listener. When TLS is on there is no plain-HTTP listener.
 - `src/db.rs` + `src/schema.sql` are the SQLite store for ACME state (accounts, orders, authorizations, challenges, certificates).
 - `src/acme/` implements RFC 8555: `jws.rs` (flattened-JSON JWS verification), `nonce.rs` (in-memory anti-replay), `directory.rs`, `account.rs`, `order.rs`, `authz.rs`, `challenge.rs` (real http-01 validation via a background task), `cert.rs` (download + revoke), `error.rs` (`AcmeError`, a separate `application/problem+json` envelope from `AppError`), `urls.rs`. See `ACME.md` for the protocol-level reference and known gaps.
 - `src/routes/` contains REST and WebSocket route handlers (`api.rs`, `ws.rs`), and nests `acme::router()` under `/acme/*`.

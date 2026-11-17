@@ -42,16 +42,25 @@ token/key-authorization, the issued certificate PEM, revocation), ending
 with `INTEROP CHECK PASSED`. A non-zero exit and an `Error: ...` line means
 something in the ACME flow broke — the printed step tells you where.
 
-## Why plain HTTP
+### Against lizard's in-process HTTPS
+
+With `[tls].enabled = true` (or `--tls`) lizard serves HTTPS only, using a
+certificate issued by its own root. Pass an `https://` directory URL plus
+the root CA PEM as the second argument (or via `LIZARD_CA_ROOT`); the
+client then trusts *only* that root:
+
+```sh
+cd ../.. && cargo run -- --tls          # terminal 1
+cargo run -- https://127.0.0.1:8080/directory ../../data/ca/root-cert.pem
+```
+
+## HTTP vs HTTPS clients
 
 `instant-acme`'s default HTTP client (`Account::builder()`) is hard-coded
-to HTTPS only. `lizard` speaks plain HTTP by design — TLS termination is
-meant to be a reverse proxy's job (see the main README) — so this tool
-builds its own plain `hyper` client and passes it to
-`Account::builder_with_http()` instead. If you point this at a `https://`
-URL behind a real reverse proxy, that plain client won't be able to
-connect; swap in `Account::builder()` (or `builder_with_root()` for a
-self-signed proxy cert) in that case.
+to HTTPS only. For a plain `http://` directory this tool builds its own
+plain `hyper` client and passes it to `Account::builder_with_http()`; for
+an `https://` directory it uses `Account::builder_with_root()` with the
+CA root you supply.
 
 ## Why not certbot
 

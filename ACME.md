@@ -66,12 +66,6 @@ success or error, and errors use `application/problem+json`
 - **Key rollover / external account binding** — not implemented.
   `keyChange` is advertised in the directory for spec-completeness but has
   no handler behind it.
-- **In-process TLS** — RFC 8555 requires ACME servers to be reachable over
-  HTTPS. This server speaks plain HTTP; the supported deployment model is
-  a TLS-terminating reverse proxy in front of it, with `[server].base_url`
-  set to the externally-visible HTTPS URL so directory/resource URLs are
-  correct. Self-bootstrapping in-process TLS from the CA's own root is a
-  natural follow-up, not yet done.
 - **SSRF hardening** — `validate_http01` fetches whatever host a
   client-submitted `dns` identifier resolves to, with no allow/deny-list on
   the resulting IP. Smaller blast radius for an internal-only CA than a
@@ -81,6 +75,26 @@ success or error, and errors use `application/problem+json`
 - **No admin authentication** — the `/api/*` admin endpoints
   (`/api/ca`, `/api/certificates`, `/api/certificates/{id}/revoke`) have no
   auth of their own, matching the rest of this app's `/api/*` surface today.
+
+## Transport (HTTPS)
+
+RFC 8555 §6.1 requires ACME servers to be reachable over HTTPS. Two
+deployment models are supported:
+
+- **In-process TLS** (`[tls].enabled` / `--tls`): the server serves HTTPS
+  *only*, with no plain-HTTP listener, using a leaf certificate issued by its
+  own root via the same `Ca::sign_csr` path and fixed non-CA/ServerAuth
+  profile as ACME-issued leaves. When `[server].base_url` is unset,
+  `external_base_url` defaults to `https://{host}:{port}`, so every
+  directory/resource URL is `https://`. See `src/tls.rs` for the
+  reuse-vs-reissue rules, which check the chain against the current root,
+  the key match, the exact SAN set and the renewal window. It also covers
+  the hot-reloading renewal task.
+- **Reverse proxy**: lizard speaks plain HTTP behind a TLS-terminating
+  proxy, with `[server].base_url` set to the proxy's external HTTPS URL.
+
+Outbound http-01 validation is unaffected either way. It always fetches
+`http://{domain}/.well-known/acme-challenge/…`, as RFC 8555 §8.3 requires.
 
 ## Interoperability
 
@@ -93,11 +107,10 @@ Verified against two independently-implemented clients during development
 - [`instant-acme`](https://docs.rs/instant-acme) (a real, independently
   maintained Rust ACME client — not code this project owns) driving the same
   full flow end to end, including revocation, against a live instance.
-  `instant-acme`'s default HTTP client is TLS-only; since this server speaks
-  plain HTTP by design (see "In-process TLS" above), the check supplies a
-  custom `hyper` client instead of fighting that default — the check is
-  still exercising this server's real ACME wire protocol, just over `http://`
-  rather than `https://`.
+  CI runs it twice: over plain `http://`, using a custom `hyper` client
+  because `instant-acme`'s default client is TLS-only, and over lizard's
+  in-process HTTPS (`--tls`), using `instant-acme`'s own TLS client trusting
+  only lizard's root.
 
   **This run caught and fixed a real conformance bug**: `GET`/`HEAD
   /acme/new-nonce` returned `204 No Content`. RFC 8555 §7.2's own example

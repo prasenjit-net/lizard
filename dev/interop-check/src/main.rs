@@ -28,12 +28,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "http://127.0.0.1:8080/directory".to_string());
 
-    // instant-acme's default HTTP client is hard-coded https_only(); lizard
-    // speaks plain HTTP by design (TLS termination is meant to be a reverse
-    // proxy's job — see the main README), so build a plain-HTTP hyper
-    // client and hand it to Account::builder_with_http instead of using
-    // Account::builder()'s default.
-    let http_client = HyperClient::builder(TokioExecutor::new()).build(HttpConnector::new());
+    // For an `https://` directory (lizard running with `[tls].enabled`), the
+    // second argument (or LIZARD_CA_ROOT) is lizard's root CA PEM — the only
+    // thing that should be trusted, since lizard serves HTTPS with a
+    // certificate issued by that root. For plain `http://`, instant-acme's
+    // default client is hard-coded https_only(), so a plain hyper client is
+    // handed to Account::builder_with_http instead.
+    let ca_root = std::env::args()
+        .nth(2)
+        .or_else(|| std::env::var("LIZARD_CA_ROOT").ok());
+    let account_builder = if directory_url.starts_with("https://") {
+        let ca_root = ca_root.ok_or(
+            "an https:// directory needs lizard's root CA PEM as the second argument \
+             (or in LIZARD_CA_ROOT)",
+        )?;
+        println!("== trusting only the CA root at {ca_root} ==");
+        Account::builder_with_root(&ca_root)?
+    } else {
+        let http_client = HyperClient::builder(TokioExecutor::new()).build(HttpConnector::new());
+        Account::builder_with_http(Box::new(http_client))
+    };
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
@@ -65,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     println!("== creating account against {directory_url} ==");
-    let (account, _credentials) = Account::builder_with_http(Box::new(http_client))
+    let (account, _credentials) = account_builder
         .create(
             &NewAccount {
                 contact: &[],

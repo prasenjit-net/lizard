@@ -10,10 +10,11 @@ use crate::acme::nonce::NonceStore;
 use crate::ca::Ca;
 use crate::config::AppConfig;
 use crate::db::Db;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::services::events::Event;
 use crate::services::metrics::MetricsSnapshot;
 use crate::services::tasks::TaskStore;
+use crate::tls::{self, ServerCert};
 
 pub struct AppState {
     pub config: AppConfig,
@@ -31,6 +32,13 @@ pub struct AppState {
     /// paying a fresh TLS/TCP handshake per check.
     pub http_client: reqwest::Client,
     pub ca: Ca,
+    /// The certificate currently served over HTTPS — `None` when
+    /// `[tls].enabled` is off. Behind a lock because the renewal task
+    /// swaps it out while the server is running.
+    pub server_tls: Option<std::sync::RwLock<ServerCert>>,
+    /// The SAN set the server certificate is (re)issued for, resolved
+    /// once at startup from config + CLI overrides.
+    pub tls_sans: Vec<String>,
     pub db: Db,
     pub latest_metrics: RwLock<Option<MetricsSnapshot>>,
     pub requests_total: AtomicU64,
@@ -49,11 +57,29 @@ impl AppState {
         let ca = Ca::load_or_generate(&config.ca)?;
         let generated_root = ca.generated_root();
         let db = Db::open(&config.ca.db_path)?;
-        let external_base_url = config
-            .server
-            .base_url
-            .clone()
-            .unwrap_or_else(|| format!("http://{}:{}", config.server.host, config.server.port));
+        let scheme = if config.tls.enabled { "https" } else { "http" };
+        let external_base_url =
+            config.server.base_url.clone().unwrap_or_else(|| {
+                format!("{scheme}://{}:{}", config.server.host, config.server.port)
+            });
+        let (server_tls, tls_sans, tls_reissue_reason) = if config.tls.enabled {
+            if tls_validity_days(&config) < 1 {
+                return Err(AppError::Config(
+                    "[tls].validity_days must be at least 1".into(),
+                ));
+            }
+            let sans = tls::desired_sans(&config)?;
+            let (cert, reason) = tls::load_or_issue(
+                &ca,
+                &config.tls.cert_path,
+                &config.tls.key_path,
+                &sans,
+                tls_validity_days(&config),
+            )?;
+            (Some(std::sync::RwLock::new(cert)), sans, reason)
+        } else {
+            (None, Vec::new(), None)
+        };
         let http_client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(3))
             .timeout(std::time::Duration::from_secs(10))
@@ -65,6 +91,8 @@ impl AppState {
             nonces: NonceStore::new(),
             http_client,
             ca,
+            server_tls,
+            tls_sans,
             db,
             latest_metrics: RwLock::new(None),
             requests_total: AtomicU64::new(0),
@@ -77,7 +105,22 @@ impl AppState {
         if generated_root {
             state.audit("ca", "generated CA root certificate");
         }
+        if let Some(reason) = tls_reissue_reason {
+            state.audit(
+                "tls",
+                format!(
+                    "issued server TLS certificate for {} ({reason})",
+                    state.tls_sans.join(", ")
+                ),
+            );
+        }
         Ok(state)
+    }
+
+    /// Lifetime of the server TLS certificate: `[tls].validity_days`, else
+    /// the CA-wide `[ca].cert_validity_days`.
+    pub fn tls_validity_days(&self) -> i64 {
+        tls_validity_days(&self.config)
     }
 
     pub fn broadcast(&self, event: Event) {
@@ -118,4 +161,11 @@ impl AppState {
             timestamp_ms: chrono::Utc::now().timestamp_millis(),
         });
     }
+}
+
+fn tls_validity_days(config: &AppConfig) -> i64 {
+    config
+        .tls
+        .validity_days
+        .unwrap_or(config.ca.cert_validity_days)
 }

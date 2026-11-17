@@ -34,3 +34,19 @@ root_validity_years = 10
 # How long each certificate this server issues stays valid for.
 cert_validity_days = 90
 db_path = "data/lizard.db"
+
+[tls]
+# Serve HTTPS *only* (no plain-HTTP listener) with a certificate issued by
+# this server's own CA root above. Never an external certificate. Off by
+# default; `--tls` / `--no-tls` override this.
+enabled = false
+# Cache for the self-issued server certificate (leaf + root) and its key.
+# Reissued automatically if missing, issued by a different root, the SANs
+# below changed, or renewal is due.
+cert_path = "data/tls/server-cert.pem"
+key_path = "data/tls/server-key.pem"
+# Extra SANs (DNS names or IPs) on top of the automatic ones: localhost,
+# 127.0.0.1, ::1, [server].host (unless 0.0.0.0/::) and the [server].base_url
+# host. `--tls-hostname <name>` appends to this list.
+external_hostnames = []
+# validity_days = 90   # defaults to [ca].cert_validity_days

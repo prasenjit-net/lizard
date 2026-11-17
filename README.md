@@ -14,11 +14,10 @@ into the executable. Build once, ship one file.
 > **Status:** the core ACME (RFC 8555) protocol works end to end — account
 > registration, orders, http-01 validation, finalize, certificate download,
 > and revocation — against a private root CA this server generates on first
-> run. Not yet implemented: dns-01/tls-alpn-01 challenges (so no wildcard
-> certs), key rollover, external account binding, and in-process TLS
-> termination for the ACME endpoints themselves (run this behind a
-> TLS-terminating reverse proxy, or set `[server].base_url` to whatever
-> external HTTPS URL that proxy exposes).
+> run. It can serve HTTPS itself (`[tls].enabled`), using a certificate
+> issued by that same root. Not yet implemented: dns-01/tls-alpn-01
+> challenges (so no wildcard certs), key rollover, and external account
+> binding.
 
 ## Features
 
@@ -27,6 +26,11 @@ into the executable. Build once, ship one file.
   stub), finalize, certificate download, and revocation, all backed by a
   private root CA this server owns. See [`ACME.md`](ACME.md) for the
   protocol details, correctness invariants, and known gaps.
+- **In-process HTTPS** — opt-in with `[tls].enabled` / `--tls`. The server
+  serves HTTPS *only*, with a certificate issued by its own root (never an
+  external one), with SANs derived from `localhost`, the bind host,
+  `[server].base_url`, and `[tls].external_hostnames`. It auto-renews and
+  hot-reloads without a restart. See [HTTPS](#https).
 - **Certificates admin page** — the CA's root certificate (copy/download for
   trust-store installation) and every issued certificate with its status and
   a revoke action, live-updating over the same WebSocket the dashboard uses
@@ -105,6 +109,9 @@ lizard [OPTIONS]
       --log-level <LOG_LEVEL>  Override [logging].level (trace, debug, info, warn, error)
       --access-log <PATH>      Override [logging].access_log file path
       --no-access-log          Disable the access log file entirely
+      --tls                    Serve HTTPS only, with a certificate from this CA
+      --no-tls                 Serve plain HTTP even if [tls].enabled is set
+      --tls-hostname <NAME>    Extra SAN for the server certificate (repeatable)
 ```
 
 ## Configuration (`config.toml`)
@@ -113,6 +120,7 @@ lizard [OPTIONS]
 |---|---|---|
 | `server.host` | `127.0.0.1` | Bind address |
 | `server.port` | `8080` | Bind port |
+| `server.base_url` | *(unset)* | External base URL for ACME URLs; defaults to `http(s)://{host}:{port}` |
 | `logging.level` | `info` | Tracing filter (full directives allowed, e.g. `info,access=warn`) |
 | `logging.access_log` | *(unset)* | Access-log file path; omit to disable the file |
 | `ui.app_name` | `Lizard` | Shown in the sidebar + browser title |
@@ -124,6 +132,11 @@ lizard [OPTIONS]
 | `ca.root_validity_years` | `10` | Validity period for a freshly generated root |
 | `ca.cert_validity_days` | `90` | Validity period for each certificate this server issues |
 | `ca.db_path` | `data/lizard.db` | SQLite database for accounts/orders/certificates |
+| `tls.enabled` | `false` | Serve HTTPS only (no plain-HTTP listener) |
+| `tls.cert_path` | `data/tls/server-cert.pem` | Where the self-issued server cert chain (leaf + root) is cached |
+| `tls.key_path` | `data/tls/server-key.pem` | Where its private key is cached (`0600`) |
+| `tls.external_hostnames` | `[]` | Extra SANs (DNS names or IPs), e.g. the name clients use |
+| `tls.validity_days` | *(unset → `ca.cert_validity_days`)* | Lifetime of the server certificate |
 
 If the config file is missing, built-in defaults are used (with a warning).
 
@@ -131,6 +144,33 @@ On first run, the server generates an ECDSA P-256 root CA under `data/ca/`
 (directly off the root — no intermediate yet) and logs a warning with its
 path. Install that root certificate in the trust store of anything that
 should accept certificates this server issues.
+
+## HTTPS
+
+With `[tls].enabled = true` (or `--tls`), lizard listens for **HTTPS only** on
+`server.host:server.port`. It doesn't open a plain-HTTP port or redirect. The
+certificate always comes from lizard's own root CA. You can't configure an
+externally issued one.
+
+- **SANs:** `localhost`, `127.0.0.1` and `::1`. Also `server.host`
+  (unless it's a wildcard bind address like `0.0.0.0`), the host of
+  `server.base_url`, and every `tls.external_hostnames` /
+  `--tls-hostname` entry. Wildcards are rejected.
+- **Reuse vs. reissue:** on startup the cached certificate at `tls.cert_path`
+  is reused only if it chains to the *current* root, matches its key,
+  carries exactly the configured SAN set, and isn't yet due for renewal.
+  Otherwise a new one is issued and logged in the activity log.
+- **Renewal:** a background task reissues the certificate once two-thirds
+  of its lifetime has passed and hot-swaps it into the listener. No restart
+  is needed.
+- **Clients** must trust `data/ca/root-cert.pem`, for example
+  `curl --cacert data/ca/root-cert.pem https://localhost:8080/directory`.
+  ACME directory/resource URLs switch to `https://` automatically.
+- **Frontend dev:** run `LIZARD_BACKEND=https://127.0.0.1:8080 npm run dev`
+  so the Vite proxy talks HTTPS to the backend.
+
+A TLS-terminating reverse proxy in front of a plain-HTTP lizard (with
+`server.base_url` set to the proxy's URL) is still supported.
 
 ## API
 
@@ -180,6 +220,8 @@ WebSocket events are JSON discriminated by `type`:
 │   ├── access_log.rs         access-log middleware (console + file)
 │   ├── static_assets.rs      embedded SPA + fallback routing
 │   ├── ca.rs                 root CA bootstrap + CSR signing (rcgen)
+│   ├── tls.rs                in-process HTTPS: self-issued server cert,
+│   │                         reuse/reissue checks, renewal, listener
 │   ├── db.rs, schema.sql     SQLite store for ACME state
 │   ├── acme/                 directory, jws, nonce, account, order,
 │   │                         authz, challenge, cert, error, urls
